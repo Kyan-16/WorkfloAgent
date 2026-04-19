@@ -3,6 +3,7 @@ Tool 基类定义
 
 定义工具的统一接口，支持 OpenAI Function Calling 格式。
 """
+
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -12,6 +13,7 @@ from typing import Any, Optional
 @dataclass
 class ToolResult:
     """工具执行结果"""
+
     success: bool = True
     output: Any = None
     error: Optional[str] = None
@@ -28,9 +30,7 @@ class ToolResult:
 class Tool(ABC):
     """
     工具基类
-
     所有自定义工具必须继承此类并实现 execute() 方法。
-
     使用示例：
         class WeatherTool(Tool):
             name = "get_weather"
@@ -66,7 +66,6 @@ class Tool(ABC):
     def get_function_schema(self) -> dict:
         """
         生成 OpenAI Function Calling 格式的 Schema
-
         :return: Function Schema 字典
         """
         return {
@@ -78,7 +77,6 @@ class Tool(ABC):
     async def safe_execute(self, **kwargs) -> ToolResult:
         """
         安全执行（自动捕获异常）
-
         :param kwargs: 工具参数
         :return: ToolResult
         """

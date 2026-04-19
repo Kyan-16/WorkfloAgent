@@ -45,9 +45,18 @@ async def main():
 
     # 3. 写入一些文档 (实际项目中从文件/数据库加载)
     docs = [
-        {"text": "Python 3.12 引入了类型参数语法 (PEP 695)，使泛型定义更简洁。", "metadata": {"source": "python_docs"}},
-        {"text": "FastAPI 是一个现代化的 Python Web 框架，基于 Starlette 和 Pydantic。", "metadata": {"source": "fastapi_docs"}},
-        {"text": "Qdrant 是一个高性能的向量数据库，支持过滤搜索和 gRPC 协议。", "metadata": {"source": "qdrant_docs"}},
+        {
+            "text": "Python 3.12 引入了类型参数语法 (PEP 695)，使泛型定义更简洁。",
+            "metadata": {"source": "python_docs"},
+        },
+        {
+            "text": "FastAPI 是一个现代化的 Python Web 框架，基于 Starlette 和 Pydantic。",
+            "metadata": {"source": "fastapi_docs"},
+        },
+        {
+            "text": "Qdrant 是一个高性能的向量数据库，支持过滤搜索和 gRPC 协议。",
+            "metadata": {"source": "qdrant_docs"},
+        },
     ]
 
     print("正在写入文档到向量库...")

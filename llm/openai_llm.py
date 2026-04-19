@@ -11,6 +11,7 @@ OpenAI 兼容 LLM 实现
 
 只需修改 base_url 和 api_key 即可切换。
 """
+
 import json
 import logging
 from typing import Optional, AsyncIterator
@@ -18,7 +19,6 @@ from typing import Optional, AsyncIterator
 from llm.base import LLMBase, LLMResponse, ChatMessage
 
 logger = logging.getLogger(__name__)
-
 
 class OpenAILLM(LLMBase):
     """
@@ -108,14 +108,16 @@ class OpenAILLM(LLMBase):
             tool_calls = []
             if choice.message.tool_calls:
                 for tc in choice.message.tool_calls:
-                    tool_calls.append({
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    })
+                    tool_calls.append(
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                    )
                 finish_reason = "tool_calls"
 
             # Token 使用量

@@ -3,6 +3,7 @@
 
 利用 LLM 从非结构化文本中提取结构化信息。
 """
+
 import logging
 from typing import Optional
 
@@ -62,9 +63,7 @@ class DocumentParserSkill(Skill):
 
         # 构建提示词
         if schema:
-            schema_desc = "\n".join(
-                f'  "{k}": {v}' for k, v in schema.items()
-            )
+            schema_desc = "\n".join(f'  "{k}": {v}' for k, v in schema.items())
             prompt = (
                 f"请从以下文本中提取信息，按此格式返回 JSON：\n"
                 f"{{\n{schema_desc}\n}}\n\n"
