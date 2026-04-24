@@ -48,18 +48,21 @@ class QdrantVectorStore(VectorStoreBase):
         embedding: EmbeddingBase,
         host: str = "localhost",
         port: int = 6333,
+        grpc_port: int = 6334,
         api_key: str = "",
         prefer_grpc: bool = True,
         embedding_dim: int = 1536,
+        dimension: Optional[int] = None,
         score_threshold: float = 0.3,
     ):
         self.collection_name = collection_name
         self.embedding = embedding
         self.host = host
         self.port = port
+        self.grpc_port = grpc_port
         self.api_key = api_key
         self.prefer_grpc = prefer_grpc
-        self.embedding_dim = embedding_dim
+        self.embedding_dim = dimension or embedding_dim
         self.score_threshold = score_threshold
 
     def _get_client(self):
@@ -72,7 +75,7 @@ class QdrantVectorStore(VectorStoreBase):
             "prefer_grpc": self.prefer_grpc,
         }
         if self.prefer_grpc:
-            kwargs["grpc_port"] = 6334
+            kwargs["grpc_port"] = self.grpc_port
         if self.api_key:
             kwargs["api_key"] = self.api_key
 

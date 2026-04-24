@@ -1,14 +1,21 @@
 """
 示例 4: RAG 知识库问答 Agent
 
-演示如何创建带 RAG 检索增强的知识库问答 Agent。
+演示如何创建带多路召回的 RAG 检索增强 Agent。
 运行: python -m examples.rag_example
 """
 
 import asyncio
 from llm import LLMFactory
 from memory import LocalMemory
-from rag import EmbeddingModel, QdrantVectorStore, Retriever
+from rag import (
+    EmbeddingModel,
+    KeywordRetriever,
+    MultiRouteRetriever,
+    QdrantVectorStore,
+    Retriever,
+    RetrieverRoute,
+)
 from agents import ChatAgent
 from config.loader import get_settings
 
@@ -31,19 +38,17 @@ async def main():
     )
 
     vector_store = QdrantVectorStore(
+        collection_name=settings.rag.collection_name,
+        embedding=embedding,
         host=settings.rag.qdrant_host,
         port=settings.rag.qdrant_port,
-        collection_name=settings.rag.collection_name,
+        grpc_port=settings.rag.qdrant_grpc_port,
+        prefer_grpc=settings.rag.qdrant_use_grpc,
         dimension=settings.rag.embedding_dimension,
+        score_threshold=settings.rag.score_threshold,
     )
 
-    retriever = Retriever(
-        embedding=embedding,
-        vector_store=vector_store,
-        top_k=settings.rag.top_k,
-    )
-
-    # 3. 写入一些文档 (实际项目中从文件/数据库加载)
+    # 3. 准备一些文档 (实际项目中从文件/数据库加载)
     docs = [
         {
             "text": "Python 3.12 引入了类型参数语法 (PEP 695)，使泛型定义更简洁。",
@@ -60,14 +65,32 @@ async def main():
     ]
 
     print("正在写入文档到向量库...")
-    for doc in docs:
-        vector = await embedding.embed(doc["text"])
-        await vector_store.upsert(
-            text=doc["text"],
-            vector=vector,
-            metadata=doc["metadata"],
-        )
+    await vector_store.add_texts(
+        texts=[doc["text"] for doc in docs],
+        metadatas=[doc["metadata"] for doc in docs],
+    )
     print(f"已写入 {len(docs)} 条文档\n")
+
+    vector_retriever = Retriever(
+        vector_store=vector_store,
+        top_k=settings.rag.top_k,
+        score_threshold=settings.rag.score_threshold,
+    )
+    keyword_retriever = KeywordRetriever(
+        documents=[
+            {"content": doc["text"], "metadata": doc["metadata"]}
+            for doc in docs
+        ],
+        top_k=settings.rag.top_k,
+    )
+
+    retriever = MultiRouteRetriever(
+        routes=[
+            RetrieverRoute("vector", vector_retriever, weight=1.0),
+            RetrieverRoute("keyword", keyword_retriever, weight=0.6),
+        ],
+        top_k=settings.rag.top_k,
+    )
 
     # 4. 创建带 RAG 的 Agent
     memory = LocalMemory(max_history=10)
@@ -89,7 +112,8 @@ async def main():
     for q in questions:
         print(f"问: {q}")
         resp = await agent.chat(q, session_id=session_id)
-        print(f"答: {resp}\n")
+        print(f"答: {resp.content}\n")
+        print(f"来源: {resp.sources}\n")
 
 
 if __name__ == "__main__":

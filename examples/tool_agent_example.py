@@ -56,7 +56,7 @@ async def main():
     for task in tasks:
         print(f"任务: {task}")
         response = await agent.chat(task, session_id=session_id)
-        print(f"结果: {response}\n")
+        print(f"结果: {response.content}\n")
         print("-" * 60)
 
 

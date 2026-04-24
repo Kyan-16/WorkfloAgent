@@ -22,14 +22,15 @@ class LocalMemory(MemoryBase):
         history = await memory.get_history("session_1")
     """
 
-    def __init__(self, max_messages: int = 100):
+    def __init__(self, max_messages: int = 100, max_history: int | None = None):
         """
         初始化本地记忆
 
         :param max_messages: 每个会话最大消息数
+        :param max_history: 兼容旧示例的参数名，传入时覆盖 max_messages
         """
         self._store: dict[str, list[MemoryMessage]] = defaultdict(list)
-        self._max_messages = max_messages
+        self._max_messages = max_history if max_history is not None else max_messages
 
     async def add(self, session_id: str, role: str, content: str) -> bool:
         """添加消息"""

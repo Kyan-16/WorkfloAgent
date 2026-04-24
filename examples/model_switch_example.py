@@ -25,7 +25,7 @@ async def main():
     )
     agent = ChatAgent(llm=qwen_llm, memory=memory, system_prompt="你是通义千问助手")
     resp = await agent.chat("你好，你是什么模型？", session_id="s1")
-    print(f"回复: {resp}\n")
+    print(f"回复: {resp.content}\n")
 
     # ==========================================
     # 方式 2: DeepSeek (OpenAI 兼容)
@@ -39,7 +39,7 @@ async def main():
     )
     agent.llm = deepseek_llm  # 运行时热切换！
     resp = await agent.chat("你好，你是什么模型？", session_id="s2")
-    print(f"回复: {resp}\n")
+    print(f"回复: {resp.content}\n")
 
     # ==========================================
     # 方式 3: 本地 Ollama
@@ -53,7 +53,7 @@ async def main():
     )
     agent.llm = ollama_llm
     resp = await agent.chat("你好，你是什么模型？", session_id="s3")
-    print(f"回复: {resp}\n")
+    print(f"回复: {resp.content}\n")
 
     # ==========================================
     # 方式 4: GLM-4 (智谱)
@@ -67,7 +67,7 @@ async def main():
     )
     agent.llm = glm_llm
     resp = await agent.chat("你好，你是什么模型？", session_id="s4")
-    print(f"回复: {resp}\n")
+    print(f"回复: {resp.content}\n")
 
 
 if __name__ == "__main__":

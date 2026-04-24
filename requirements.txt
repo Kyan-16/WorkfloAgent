@@ -8,6 +8,7 @@ pydantic>=2.0.0
 # ---------- LLM SDK ----------
 dashscope>=1.14.0
 openai>=1.6.0
+langgraph>=0.2.0
 
 # ---------- RAG ----------
 qdrant-client>=1.7.0

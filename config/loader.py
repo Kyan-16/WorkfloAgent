@@ -11,7 +11,8 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Optional
+from dataclasses import fields
+from typing import Optional, get_args, get_origin
 
 from .settings import Settings, LLMConfig, RAGConfig, MemoryConfig, ServerConfig
 
@@ -94,13 +95,47 @@ class ConfigLoader:
             app_name=data.get("app_name", "Agent Template"),
             version=data.get("version", "1.0.0"),
             env=env,
-            llm=LLMConfig(**{k: v for k, v in llm_data.items() if k in LLMConfig.__dataclass_fields__}),
-            rag=RAGConfig(**{k: v for k, v in rag_data.items() if k in RAGConfig.__dataclass_fields__}),
-            memory=MemoryConfig(**{k: v for k, v in memory_data.items() if k in MemoryConfig.__dataclass_fields__}),
-            server=ServerConfig(**{k: v for k, v in server_data.items() if k in ServerConfig.__dataclass_fields__}),
+            llm=LLMConfig(**ConfigLoader._coerce_dataclass_values(LLMConfig, llm_data)),
+            rag=RAGConfig(**ConfigLoader._coerce_dataclass_values(RAGConfig, rag_data)),
+            memory=MemoryConfig(**ConfigLoader._coerce_dataclass_values(MemoryConfig, memory_data)),
+            server=ServerConfig(**ConfigLoader._coerce_dataclass_values(ServerConfig, server_data)),
             prompts_dir=data.get("prompts_dir", "prompts"),
             log_level=data.get("log_level", "INFO"),
         )
+
+    @staticmethod
+    def _coerce_dataclass_values(cls, data: dict) -> dict:
+        """按 dataclass 字段类型转换环境变量带来的字符串值。"""
+        field_map = {f.name: f for f in fields(cls)}
+        result = {}
+        for key, value in data.items():
+            field_info = field_map.get(key)
+            if not field_info:
+                continue
+            result[key] = ConfigLoader._coerce_value(value, field_info.type)
+        return result
+
+    @staticmethod
+    def _coerce_value(value, target_type):
+        if not isinstance(value, str):
+            return value
+
+        origin = get_origin(target_type)
+        args = get_args(target_type)
+        if origin is Optional:
+            target_type = args[0]
+        elif origin is list:
+            return [item.strip() for item in value.split(",") if item.strip()]
+        elif args and type(None) in args:
+            target_type = next((arg for arg in args if arg is not type(None)), str)
+
+        if target_type is bool:
+            return value.lower() in ("1", "true", "yes", "on")
+        if target_type is int:
+            return int(value)
+        if target_type is float:
+            return float(value)
+        return value
 
 
 # ---------- 快捷函数 ----------

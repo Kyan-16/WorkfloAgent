@@ -5,5 +5,6 @@ Memory 记忆系统
 """
 from memory.base import MemoryBase, MemoryMessage
 from memory.local_memory import LocalMemory
+from memory.redis_memory import RedisMemory
 
-__all__ = ["MemoryBase", "MemoryMessage", "LocalMemory"]
+__all__ = ["MemoryBase", "MemoryMessage", "LocalMemory", "RedisMemory"]

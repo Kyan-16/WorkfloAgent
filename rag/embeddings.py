@@ -128,3 +128,34 @@ class OpenAIEmbedding(EmbeddingBase):
         except Exception as e:
             logger.error(f"OpenAI 批量 Embedding 异常: {e}")
             return []
+
+
+class EmbeddingModel:
+    """
+    Embedding 工厂兼容层。
+
+    README 和示例可以使用 EmbeddingModel(provider=...) 创建具体实现，
+    实际返回对象实现 EmbeddingBase 接口。
+    """
+
+    def __new__(
+        cls,
+        provider: str = "dashscope",
+        model: str = "",
+        api_key: str = "",
+        base_url: Optional[str] = None,
+        **kwargs,
+    ) -> EmbeddingBase:
+        provider = (provider or "dashscope").lower()
+        if provider == "dashscope":
+            return DashScopeEmbedding(
+                model=model or "text-embedding-v2",
+                api_key=api_key,
+            )
+        if provider == "openai":
+            return OpenAIEmbedding(
+                model=model or "text-embedding-3-small",
+                api_key=api_key,
+                base_url=base_url,
+            )
+        raise ValueError(f"不支持的 Embedding Provider: {provider}")

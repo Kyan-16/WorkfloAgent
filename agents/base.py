@@ -12,6 +12,7 @@ from llm.base import LLMBase, ChatMessage, LLMResponse
 from memory.base import MemoryBase
 from rag.retriever import Retriever
 from tools.registry import ToolRegistry
+from utils.tracing import AgentTraceRecorder, llm_response_to_dict, messages_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class AgentResponse:
             "model": self.model,
             "session_id": self.session_id,
             "elapsed_seconds": self.elapsed_seconds,
+            "metadata": self.metadata,
         }
 
 
@@ -93,49 +95,104 @@ class AgentBase:
         5. 保存对话历史
         """
         start_time = time.time()
-
-        # 1. 系统提示词
-        messages = [ChatMessage(role="system", content=self.system_prompt)]
-
-        # 2. RAG 检索
-        sources = []
-        if use_rag and self.retriever:
-            docs = await self.retriever.retrieve(user_input)
-            if docs:
-                context = Retriever.format_context(docs)
-                messages.append(ChatMessage(
-                    role="system",
-                    content=f"【参考资料】\n{context}\n\n请结合上述参考资料回答用户问题。",
-                ))
-                sources = [
-                    {"content": d["content"][:200], "score": d.get("score", 0)}
-                    for d in docs
-                ]
-
-        # 3. 加载对话历史
-        if self.memory:
-            history = await self.memory.get_history(session_id, limit=self.memory_window_size)
-            for msg in history:
-                messages.append(ChatMessage(role=msg.role, content=msg.content))
-
-        # 4. 添加用户输入
-        messages.append(ChatMessage(role="user", content=user_input))
-
-        # 5. 调用 LLM
-        llm_response = await self.llm.generate(messages=messages)
-
-        # 6. 保存对话历史
-        if self.memory:
-            await self.memory.add(session_id, "user", user_input)
-            await self.memory.add(session_id, "assistant", llm_response.content)
-
-        elapsed = time.time() - start_time
-
-        return AgentResponse(
-            content=llm_response.content,
-            sources=sources,
-            tokens_used=llm_response.tokens_used,
-            model=llm_response.model,
+        trace = AgentTraceRecorder(
+            agent_type=type(self).__name__,
             session_id=session_id,
-            elapsed_seconds=round(elapsed, 2),
+            user_input=user_input,
+            metadata={"use_rag": use_rag},
         )
+
+        try:
+            # 1. 系统提示词
+            messages = [ChatMessage(role="system", content=self.system_prompt)]
+
+            # 2. RAG 检索
+            sources = []
+            if use_rag and self.retriever:
+                rag_start = time.time()
+                docs = await self.retriever.retrieve(user_input)
+                trace.record(
+                    "rag_retrieve",
+                    {
+                        "elapsed_seconds": round(time.time() - rag_start, 3),
+                        "doc_count": len(docs),
+                        "docs": docs,
+                    },
+                )
+                if docs:
+                    context = Retriever.format_context(docs)
+                    messages.append(ChatMessage(
+                        role="system",
+                        content=f"【参考资料】\n{context}\n\n请结合上述参考资料回答用户问题。",
+                    ))
+                    sources = [
+                        {
+                            "content": d["content"][:200],
+                            "score": d.get("score", 0),
+                            "metadata": d.get("metadata", {}),
+                        }
+                        for d in docs
+                    ]
+
+            # 3. 加载对话历史
+            if self.memory:
+                history = await self.memory.get_history(session_id, limit=self.memory_window_size)
+                trace.record(
+                    "memory_load",
+                    {
+                        "history_count": len(history),
+                        "limit": self.memory_window_size,
+                        "messages": [
+                            {"role": msg.role, "content": msg.content}
+                            for msg in history
+                        ],
+                    },
+                )
+                for msg in history:
+                    messages.append(ChatMessage(role=msg.role, content=msg.content))
+
+            # 4. 添加用户输入
+            messages.append(ChatMessage(role="user", content=user_input))
+
+            # 5. 调用 LLM
+            trace.record(
+                "llm_request",
+                {
+                    "model": getattr(self.llm, "model", ""),
+                    "message_count": len(messages),
+                    "messages": messages_to_dict(messages),
+                    "tools": [],
+                },
+            )
+            llm_start = time.time()
+            llm_response = await self.llm.generate(messages=messages)
+            trace.record(
+                "llm_response",
+                {
+                    "elapsed_seconds": round(time.time() - llm_start, 3),
+                    **llm_response_to_dict(llm_response),
+                },
+            )
+
+            # 6. 保存对话历史
+            if self.memory:
+                await self.memory.add(session_id, "user", user_input)
+                await self.memory.add(session_id, "assistant", llm_response.content)
+                trace.record("memory_save", {"messages_saved": 2})
+
+            elapsed = time.time() - start_time
+
+            response = AgentResponse(
+                content=llm_response.content,
+                sources=sources,
+                tokens_used=llm_response.tokens_used,
+                model=llm_response.model,
+                session_id=session_id,
+                elapsed_seconds=round(elapsed, 2),
+                metadata={"trace_id": trace.trace_id},
+            )
+            trace.finish(response=response.to_dict())
+            return response
+        except Exception as e:
+            trace.fail(e)
+            raise

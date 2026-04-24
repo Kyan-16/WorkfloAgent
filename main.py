@@ -65,6 +65,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     session_id: str
+    trace_id: Optional[str] = None
 
 
 # ---------- 路由 ----------
@@ -77,8 +78,13 @@ async def health():
 async def chat(req: ChatRequest):
     """对话接口"""
     try:
-        reply = await agent.chat(req.message, session_id=req.session_id)
-        return ChatResponse(reply=reply, session_id=req.session_id)
+        session_id = req.session_id or "default"
+        response = await agent.chat(req.message, session_id=session_id)
+        return ChatResponse(
+            reply=response.content,
+            session_id=session_id,
+            trace_id=response.metadata.get("trace_id"),
+        )
     except Exception as e:
         logger.error(f"对话异常: {e}")
         raise HTTPException(status_code=500, detail=str(e))

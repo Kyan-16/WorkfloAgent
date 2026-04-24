@@ -46,7 +46,7 @@ async def main():
             break
 
         response = await agent.chat(user_input, session_id=session_id)
-        print(f"AI: {response}\n")
+        print(f"AI: {response.content}\n")
 
 
 if __name__ == "__main__":

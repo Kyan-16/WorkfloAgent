@@ -33,17 +33,42 @@ class RedisMemory(MemoryBase):
         history = await memory.get_history("session_1", limit=10)
     """
 
-    def __init__(self, redis_client, ttl: int = DEFAULT_TTL, key_prefix: str = HISTORY_KEY_PREFIX):
+    def __init__(
+        self,
+        redis_client=None,
+        redis_url: str | None = None,
+        ttl: int = DEFAULT_TTL,
+        ttl_seconds: int | None = None,
+        key_prefix: str = HISTORY_KEY_PREFIX,
+        redis_prefix: str | None = None,
+        max_messages: int = 100,
+        max_history: int | None = None,
+    ):
         """
         初始化 Redis 记忆
 
         :param redis_client: Redis 异步客户端
+        :param redis_url: Redis 连接地址；不传 redis_client 时使用
         :param ttl: 记忆过期时间（秒）
+        :param ttl_seconds: 兼容配置项的过期时间参数名
         :param key_prefix: Redis key 前缀
+        :param redis_prefix: 兼容配置项的 key 前缀参数名
+        :param max_messages: 每个会话最大消息数
+        :param max_history: 兼容旧示例的参数名，传入时覆盖 max_messages
         """
+        if redis_client is None:
+            if not redis_url:
+                raise ValueError("RedisMemory 需要 redis_client 或 redis_url")
+            try:
+                import redis.asyncio as redis
+            except ImportError as exc:
+                raise ImportError("redis 未安装，请运行: pip install redis") from exc
+            redis_client = redis.from_url(redis_url, decode_responses=True)
+
         self._client = redis_client
-        self._ttl = ttl
-        self._key_prefix = key_prefix
+        self._ttl = ttl_seconds if ttl_seconds is not None else ttl
+        self._key_prefix = redis_prefix or key_prefix
+        self._max_messages = max_history if max_history is not None else max_messages
 
     def _key(self, session_id: str) -> str:
         """生成 Redis key"""
@@ -55,6 +80,7 @@ class RedisMemory(MemoryBase):
             key = self._key(session_id)
             message = json.dumps({"role": role, "content": content}, ensure_ascii=False)
             await self._client.rpush(key, message)
+            await self._client.ltrim(key, -self._max_messages, -1)
             await self._client.expire(key, self._ttl)
             return True
         except Exception as e:

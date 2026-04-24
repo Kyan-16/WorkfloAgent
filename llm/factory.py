@@ -101,3 +101,22 @@ def list_providers() -> list[str]:
     """列出所有已注册的 Provider"""
     _ensure_default_providers()
     return list(_PROVIDER_REGISTRY.keys())
+
+
+class LLMFactory:
+    """
+    兼容 README 和 examples 的工厂类写法。
+
+    新代码可以直接使用 create_llm(config)，示例代码中常见的
+    LLMFactory.create(...) 也保持可用。
+    """
+
+    @staticmethod
+    def create(**kwargs) -> LLMBase:
+        """通过关键字参数创建 LLM 实例"""
+        return create_llm(kwargs)
+
+    @staticmethod
+    def from_config(config: Union[dict, object]) -> LLMBase:
+        """通过配置字典或配置对象创建 LLM 实例"""
+        return create_llm(config)
