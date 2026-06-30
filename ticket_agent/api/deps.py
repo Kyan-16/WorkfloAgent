@@ -15,7 +15,6 @@ _evolution_executor = None
 
 def get_coordinator():
     """获取全局 coordinator 实例"""
-    global _coordinator
     if _coordinator is None:
         raise HTTPException(status_code=503, detail="Coordinator 未初始化")
     return _coordinator
@@ -29,7 +28,6 @@ def set_coordinator(coordinator):
 
 def get_evolution_executor():
     """获取全局 evolution executor 实例"""
-    global _evolution_executor
     if _evolution_executor is None:
         raise HTTPException(status_code=503, detail="EvolutionExecutor 未初始化")
     return _evolution_executor

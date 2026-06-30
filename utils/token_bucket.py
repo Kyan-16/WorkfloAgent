@@ -142,7 +142,6 @@ def get_api_bucket(key: str, rpm: int = 60) -> TokenBucket:
     :param key: 隔离键（如客户端 IP）
     :param rpm: 每分钟最大请求数
     """
-    global _api_buckets
     if key not in _api_buckets:
         with _api_buckets_lock:
             if key not in _api_buckets:
