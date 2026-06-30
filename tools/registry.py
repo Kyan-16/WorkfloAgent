@@ -89,25 +89,25 @@ class ToolRegistry:
         """
         return [tool.get_function_schema() for tool in self._tools.values()]
 
-    async def call(self, name: str, **kwargs) -> ToolResult:
+    async def call(self, tool_name: str, **kwargs) -> ToolResult:
         """
         按名执行工具
 
-        :param name: 工具名称
+        :param tool_name: 工具名称
         :param kwargs: 工具参数
         :return: ToolResult
         """
-        tool = self._tools.get(name)
+        tool = self._tools.get(tool_name)
         if not tool:
             available = ", ".join(self._tools.keys())
             return ToolResult(
                 success=False,
-                error=f"工具不存在: '{name}', 可用工具: [{available}]",
+                error=f"工具不存在: '{tool_name}', 可用工具: [{available}]",
             )
 
-        logger.info(f"执行工具: {name}, 参数: {kwargs}")
+        logger.info(f"执行工具: {tool_name}, 参数: {kwargs}")
         result = await tool.safe_execute(**kwargs)
-        logger.info(f"工具执行完成: {name}, 成功: {result.success}")
+        logger.info(f"工具执行完成: {tool_name}, 成功: {result.success}")
         return result
 
     async def call_from_llm_response(self, tool_call: dict) -> ToolResult:

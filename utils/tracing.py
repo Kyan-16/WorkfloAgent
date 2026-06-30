@@ -16,6 +16,54 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+# 跨平台文件锁
+# 使用锁文件（.lck）实现进程间互斥，防止多 worker 同时写入 trace 文件
+_LOCK_SUPPORTED = True
+if os.name == "nt":  # Windows
+    import msvcrt
+
+    def _acquire_lock(lock_path: Path) -> bool:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            os.close(fd)
+            return True
+        except (FileExistsError, OSError):
+            return False
+
+    def _release_lock(lock_path: Path):
+        try:
+            lock_path.unlink()
+        except OSError:
+            pass
+else:  # Unix / macOS
+    import fcntl
+
+    def _acquire_lock(lock_path: Path) -> bool:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_path._lock_fd = fd  # type: ignore[attr-defined]
+            return True
+        except (IOError, OSError):
+            try:
+                os.close(fd)
+            except NameError:
+                pass
+            return False
+
+    def _release_lock(lock_path: Path):
+        fd = getattr(lock_path, "_lock_fd", None)
+        if fd is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            lock_path.unlink()
+        except OSError:
+            pass
+
 from llm.base import ChatMessage, LLMResponse
 
 
@@ -133,6 +181,12 @@ class AgentTraceRecorder:
     def _write(self):
         trace_file = Path(os.getenv("AGENT_TRACE_FILE", "traces/agent_runs.jsonl"))
         trace_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # 文件大小轮转：超过阈值时归档
+        max_bytes = int(os.getenv("AGENT_TRACE_MAX_FILE_SIZE", str(50 * 1024 * 1024)))  # 默认 50MB
+        if trace_file.exists() and trace_file.stat().st_size > max_bytes:
+            self._rotate(trace_file)
+
         record = {
             "trace_id": self.trace_id,
             "agent_type": self.agent_type,
@@ -141,5 +195,30 @@ class AgentTraceRecorder:
             "finished_at_ms": _now_ms(),
             "events": self.events,
         }
-        with trace_file.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        # 进程间文件锁（防止多 worker 并发写入交叉错乱）
+        lock_file = trace_file.with_suffix(".jsonl.lck")
+        locked = False
+        try:
+            locked = _acquire_lock(lock_file)
+        except Exception:
+            pass  # 不支持锁的场景直接写
+
+        try:
+            with trace_file.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        finally:
+            if locked:
+                _release_lock(lock_file)
+
+    @staticmethod
+    def _rotate(path: Path):
+        """轮转 trace 文件，保留最多 5 个备份"""
+        for i in range(4, 0, -1):
+            old = path.with_suffix(f".{i}.jsonl")
+            if old.exists():
+                if i == 4:
+                    old.unlink()
+                else:
+                    old.rename(path.with_suffix(f".{i + 1}.jsonl"))
+        path.rename(path.with_suffix(".1.jsonl"))

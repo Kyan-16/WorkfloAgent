@@ -16,10 +16,25 @@ class ChatMessage:
     name: Optional[str] = None
     tool_call_id: Optional[str] = None
     tool_calls: Optional[list] = None  # Function Calling 返回的工具调用列表
+    images: list[str] = field(default_factory=list)  # 多模态：图片 URL 列表
 
     def to_dict(self) -> dict:
-        """转为 API 请求格式"""
-        msg = {"role": self.role, "content": self.content}
+        """
+        转为 API 请求格式
+
+        如果包含图片，content 转为多模态数组：
+        [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "..."}}]
+        """
+        msg = {"role": self.role}
+        if self.images and self.role == "user":
+            # 多模态格式
+            parts = [{"type": "text", "text": self.content}]
+            for img_url in self.images:
+                parts.append({"type": "image_url", "image_url": {"url": img_url}})
+            msg["content"] = parts
+        else:
+            msg["content"] = self.content
+
         if self.name:
             msg["name"] = self.name
         if self.tool_call_id:
@@ -27,6 +42,11 @@ class ChatMessage:
         if self.tool_calls:
             msg["tool_calls"] = self.tool_calls
         return msg
+
+    @classmethod
+    def user_message(cls, content: str, images: list[str] = None) -> "ChatMessage":
+        """快速创建用户消息（含可选图片）"""
+        return cls(role="user", content=content, images=images or [])
 
 
 @dataclass

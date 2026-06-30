@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkfloAgent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={darkMode:'class',theme:{extend:{colors:{primary:{50:'#EDFDF3',100:'#D4FAE2',200:'#ABF4C7',300:'#74E9A4',400:'#4ABE6E',500:'#35A85B',600:'#228547',700:'#1C6B3B',800:'#1A5532',900:'#16462A'}}}}}
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',-apple-system,sans-serif;background:#f5f5f5;color:#1a1a2e;overflow:hidden;height:100vh}
+.fade-in{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.loading-spinner{border:3px solid #e5e7eb;border-top:3px solid #35A85B;border-radius:50%;width:24px;height:24px;animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;border:none}
+.btn-primary{background:#35A85B;color:#fff}
+.btn-primary:hover{background:#228547}
+.btn-outline{background:#fff;border:1px solid #d1d5db;color:#374151}
+.btn-outline:hover{background:#f9fafb}
+.btn-sm{padding:5px 12px;font-size:12px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:500}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#0f0f1a;color:#9ca3af;z-index:50;display:flex;flex-direction:column;transition:transform .3s}
+.sidebar-logo{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-logo .logo-dot{width:10px;height:10px;border-radius:50%;background:#35A85B}
+.sidebar-logo span{color:#fff;font-weight:600;font-size:15px}
+.sidebar-nav{flex:1;padding:12px 10px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;font-size:14px;cursor:pointer;transition:all .15s;margin-bottom:2px}
+.nav-item:hover{background:rgba(255,255,255,.06);color:#d1d5db}
+.nav-item.active{background:rgba(53,168,91,.15);color:#35A85B;font-weight:500}
+.nav-item i{width:18px;text-align:center;font-size:13px}
+.nav-group-label{padding:16px 14px 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#6b7280}
+.sidebar-footer{padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#6b7280}
+.header{position:fixed;left:220px;right:0;top:0;height:56px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 24px;z-index:40;gap:12px}
+.header-user{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:13px}
+.main{margin-left:220px;margin-top:56px;height:calc(100vh - 56px);overflow-y:auto;padding:24px}
+.content-card{background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:24px;margin-bottom:16px}
+.page-title{font-size:20px;font-weight:600;color:#111827;margin-bottom:4px}
+.page-subtitle{font-size:14px;color:#6b7280;margin-bottom:20px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.3px}
+td{padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#374151}
+tr:hover{background:#f9fafb}
+.toast{position:fixed;top:16px;right:16px;padding:12px 20px;border-radius:8px;color:#fff;font-size:13px;z-index:999;animation:fadeIn .3s ease}
+.toast-success{background:#35A85B}
+.toast-error{background:#ef4444}
+.toast-info{background:#3b82f6}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:45}
+@media(max-width:768px){
+.sidebar{transform:translateX(-100%)}
+.sidebar.open{transform:translateX(0)}
+.sidebar-overlay.open{display:block}
+.header{left:0}
+.main{margin-left:0;padding:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- Toast -->
+<div id="toast-container" style="position:fixed;top:16px;right:16px;z-index:999;display:flex;flex-direction:column;gap:8px"></div>
+
+<!-- Sidebar Overlay -->
+<div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- =========================== SIDEBAR =========================== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-dot"></div>
+    <span>WorkfloAgent</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-group-label">工单</div>
+    <div class="nav-item active" onclick="showView('submit')" data-view="submit">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      <span>提交工单</span>
+    </div>
+    <div class="nav-item hidden" onclick="showView('queue')" data-view="queue" id="nav-queue">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+      <span>部门队列</span>
+    </div>
+    <div class="nav-item hidden" onclick="showView('approvals')" data-view="approvals" id="nav-approvals">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span>待审批</span>
+    </div>
+    <div class="nav-group-label">查看</div>
+    <div class="nav-item" onclick="showView('my')" data-view="my" id="nav-my">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>我的工单</span>
+    </div>
+    <div class="nav-item" onclick="showView('list')" data-view="list">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>工单记录</span>
+    </div>
+    <div class="nav-item" onclick="showView('dashboard');loadDashboard()" data-view="dashboard">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>仪表盘</span>
+    </div>
+    <div class="nav-group-label">资源</div>
+    <div class="nav-item" onclick="showView('knowledge')" data-view="knowledge">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>知识库</span>
+    </div>
+    <div class="nav-group-label">系统</div>
+    <div class="nav-item" onclick="showView('models');loadModelStatus()" data-view="models">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      <span>模型设置</span>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div id="sidebar-user" style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:8px">
+      <span id="sidebar-badge" style="width:6px;height:6px;border-radius:50%;background:#35A85B;display:inline-block"></span>
+      <span id="sidebar-username">未登录</span>
+    </div>
+  </div>
+</aside>
+
+<!-- =========================== HEADER =========================== -->
+<header class="header" id="app-header">
+  <button onclick="toggleSidebar()" style="display:none;background:none;border:none;cursor:pointer;padding:4px" class="mobile-menu-btn" id="menu-toggle">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <span id="header-title" style="font-weight:500;font-size:15px;color:#111827">提交工单</span>
+  <span id="header-subtitle" style="font-size:13px;color:#9ca3af"></span>
+  <div class="header-user">
+    <button onclick="toggleTheme()" style="background:none;border:none;cursor:pointer;padding:4px;color:#6b7280;font-size:16px" title="切换主题">🌙</button>
+    <span id="header-username" style="color:#374151;font-weight:500"></span>
+    <button id="login-btn-header" onclick="showLogin()" style="display:none;background:none;border:none;cursor:pointer;color:#35A85B;font-size:13px;padding:4px 8px;border-radius:6px;font-weight:500" class="btn-outline btn-sm">登录</button>
+    <button id="logout-btn-header" onclick="logout()" style="display:none;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;padding:4px 8px;border-radius:6px" class="btn-outline btn-sm">退出</button>
+  </div>
+</header>
+
+<!-- =========================== MAIN =========================== -->
+<main class="main" id="main-content">
+
+<!-- Login -->
+<div id="view-login" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+  <div style="background:#fff;border-radius:16px;border:1px solid #e5e7eb;padding:40px;width:380px;max-width:90%;text-align:center">
+    <div style="width:48px;height:48px;border-radius:14px;background:#EDFDF3;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#35A85B" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <h2 style="font-size:20px;font-weight:600;color:#111827;margin-bottom:4px">WorkfloAgent</h2>
+    <p style="font-size:13px;color:#9ca3af;margin-bottom:24px">企业工单智能处理系统</p>
+    <div style="display:flex;flex-direction:column;gap:12px;text-align:left">
+      <input id="login-user" type="text" placeholder="用户名" value="admin"
+             style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none">
+      <input id="login-password" type="password" placeholder="密码" value="123456"
+             style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none">
+      <p id="login-error" style="color:#ef4444;font-size:12px;display:none"></p>
+      <button onclick="doLogin()" id="login-btn"
+              style="width:100%;padding:10px;border-radius:8px;background:#35A85B;color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer">
+        登录
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VIEW: Submit ============ -->
+<div id="view-submit" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#EDFDF3;display:flex;align-items:center;justify-content:center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#35A85B" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
+      <div><div style="font-weight:600;font-size:15px;color:#111827">提交工单</div><div style="font-size:12px;color:#9ca3af">选部门快速派单，或让AI自动分类</div></div>
+    </div>
+    <textarea id="ticket-content" rows="4" placeholder="例如：电脑蓝屏了，帮忙看看..."
+              style="width:100%;padding:12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;resize:vertical;margin-bottom:12px"></textarea>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <select id="dept-select" style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;outline:none">
+        <option value="">📋 选择部门（不选则由AI自动分类）</option>
+        <option value="IT">💻 IT - 网络/账号/软件/硬件</option>
+        <option value="HR">👤 HR - 请假/薪酬/考勤</option>
+        <option value="财务">💰 财务 - 报销/发票/合同</option>
+        <option value="运维">🔧 运维 - 服务器/部署/告警</option>
+        <option value="其他">📌 其他</option>
+      </select>
+      <input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="handleFiles(this.files)">
+      <button onclick="document.getElementById('file-input').click()" class="btn btn-outline btn-sm" title="上传截图">📎</button>
+    </div>
+    <div id="image-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="submitTicketWithImages()" id="submit-btn" class="btn btn-primary" style="flex:1;justify-content:center">
+        <span id="btn-text">提交工单</span>
+        <div id="btn-spinner" class="loading-spinner" style="display:none;width:16px;height:16px"></div>
+      </button>
+      <button onclick="submitTicketStream()" id="stream-btn" class="btn btn-outline btn-sm" title="实时查看处理进度">⚡ 实时</button>
+    </div>
+    <div id="stream-progress" style="display:none;margin-top:12px;padding:12px;background:#f9fafb;border-radius:8px;font-size:13px">
+      <div id="stream-status" style="color:#6b7280;margin-bottom:8px">⏳ 正在连接...</div>
+      <div id="stream-steps"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Result Card (shown after submission) -->
+<div id="result-card" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+      <div><div style="font-weight:600;font-size:15px">处理结果</div><div style="font-size:12px;color:#9ca3af;font-family:monospace" id="result-ticket-id"></div></div>
+      <div style="display:flex;gap:8px">
+        <span id="result-category" class="badge"></span>
+        <span id="result-status" class="badge"></span>
+      </div>
+    </div>
+    <div id="result-response" style="background:#f9fafb;border-radius:8px;padding:16px;font-size:14px;line-height:1.6;white-space:pre-wrap;margin-bottom:12px"></div>
+    <div style="display:flex;gap:16px;font-size:12px;color:#9ca3af;margin-bottom:16px">
+      <span>⏱ <span id="result-elapsed"></span>s</span>
+      <span>🔍 <span id="result-trace" style="font-family:monospace"></span></span>
+    </div>
+  </div>
+  <!-- Agent Steps -->
+  <div class="content-card">
+    <div style="font-weight:600;font-size:14px;margin-bottom:12px">Agent 执行链路</div>
+    <div id="agent-steps"></div>
+  </div>
+  <!-- Confirm / Reject -->
+  <div id="confirm-section" style="display:none" class="content-card">
+    <div style="font-weight:600;font-size:14px;margin-bottom:8px">问题解决了吗？</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:12px">请确认 AI 的回复是否解决了您的问题</div>
+    <div style="display:flex;gap:8px">
+      <button onclick="confirmResolved()" class="btn" style="flex:1;justify-content:center;background:#35A85B;color:#fff">
+        ✅ 已解决，结束工单
+      </button>
+      <button onclick="rejectEscalate()" class="btn" style="flex:1;justify-content:center;background:#f59e0b;color:#fff">
+        🔄 未解决，转人工
+      </button>
+    </div>
+    <div id="confirm-thanks" style="display:none;margin-top:8px;font-size:13px;color:#35A85B;text-align:center;font-weight:500"></div>
+  </div>
+  <!-- Feedback -->
+  <div class="content-card">
+    <div style="font-weight:600;font-size:14px;margin-bottom:8px">反馈</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button onclick="sendFeedback('positive',5)" id="fb-positive" class="btn btn-outline btn-sm">👍 有帮助</button>
+      <button onclick="sendFeedback('neutral',3)" id="fb-neutral" class="btn btn-outline btn-sm">🤔 一般</button>
+      <button onclick="sendFeedback('negative',1)" id="fb-negative" class="btn btn-outline btn-sm">👎 没有帮助</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <input id="feedback-comment" type="text" placeholder="补充说明（选填）..." style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none">
+      <button onclick="submitFeedback()" class="btn btn-primary btn-sm">提交</button>
+    </div>
+    <div id="feedback-thanks" style="display:none;font-size:13px;color:#35A85B;margin-top:8px">感谢反馈！</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button onclick="resetForm()" class="btn btn-outline">继续提交</button>
+    <button onclick="viewTicketDetail()" class="btn btn-outline">查看详情</button>
+  </div>
+</div>
+
+<!-- ============ VIEW: My Tickets ============ -->
+<div id="view-my" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><div class="page-title" id="my-title">我的工单</div><div class="page-subtitle" id="my-subtitle"></div></div>
+      <select id="my-status-filter" onchange="loadMyTickets()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px">
+        <option value="">全部</option>
+        <option value="待处理">待处理</option>
+        <option value="处理中">处理中</option>
+        <option value="待确认">待确认</option>
+        <option value="待审批">待审批</option>
+        <option value="已解决">已解决</option>
+      </select>
+    </div>
+    <div id="loading-my" style="text-align:center;padding:40px;color:#9ca3af"><div class="loading-spinner"></div><div style="margin-top:8px;font-size:13px">加载中...</div></div>
+    <div id="my-table" style="display:none;overflow-x:auto">
+      <table><thead><tr><th>工单号</th><th>内容</th><th>分类</th><th>状态</th><th>处理人</th><th>操作</th></tr></thead><tbody id="my-rows"></tbody></table>
+    </div>
+    <div id="empty-my" style="display:none;text-align:center;padding:40px;color:#9ca3af;font-size:13px">暂无工单</div>
+  </div>
+</div>
+
+<!-- ============ VIEW: Queue ============ -->
+<div id="view-queue" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><div class="page-title" id="queue-title">部门队列</div><div class="page-subtitle" id="queue-subtitle"></div></div>
+      <select id="queue-status-filter" onchange="loadQueue()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px">
+        <option value="">全部</option>
+        <option value="待处理">待处理</option>
+        <option value="处理中">处理中</option>
+        <option value="待审批">待审批</option>
+      </select>
+    </div>
+    <div id="loading-queue" style="text-align:center;padding:40px;color:#9ca3af"><div class="loading-spinner"></div><div style="margin-top:8px;font-size:13px">加载中...</div></div>
+    <div id="queue-table" style="display:none;overflow-x:auto">
+      <table><thead><tr><th>工单号</th><th>内容</th><th>提交人</th><th>状态</th><th>优先级</th><th>处理人</th></tr></thead><tbody id="queue-rows"></tbody></table>
+    </div>
+    <div id="empty-queue" style="display:none;text-align:center;padding:40px;color:#9ca3af;font-size:13px">暂无工单</div>
+  </div>
+</div>
+
+<!-- ============ VIEW: Approvals ============ -->
+<div id="view-approvals" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><div class="page-title">待审批</div><div class="page-subtitle">需您审批的工单</div></div>
+    </div>
+    <div id="loading-approvals" style="text-align:center;padding:40px;color:#9ca3af"><div class="loading-spinner"></div><div style="margin-top:8px;font-size:13px">加载中...</div></div>
+    <div id="approvals-table" style="display:none;overflow-x:auto">
+      <table><thead><tr><th>工单号</th><th>内容</th><th>提交人</th><th>分类</th><th>操作</th></tr></thead><tbody id="approvals-rows"></tbody></table>
+    </div>
+    <div id="empty-approvals" style="display:none;text-align:center;padding:40px;color:#9ca3af;font-size:13px">暂无待审批工单</div>
+  </div>
+</div>
+
+<!-- ============ VIEW: List ============ -->
+<div id="view-list" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><div class="page-title">工单记录</div><div class="page-subtitle">最近处理的工单</div></div>
+      <button onclick="loadTicketList()" class="btn btn-outline btn-sm">🔄 刷新</button>
+      <button onclick="exportTicketsCSV()" class="btn btn-outline btn-sm">📥 导出 CSV</button>
+    </div>
+    <div id="batch-toolbar" style="display:none;margin-bottom:8px;padding:8px 12px;background:#f9fafb;border-radius:8px;font-size:13px">
+      <span id="batch-count" style="color:#6b7280;margin-right:12px">已选 0 个</span>
+      <button onclick="batchClose()" class="btn btn-primary btn-sm">批量关闭</button>
+      <button onclick="batchEscalate()" class="btn btn-outline btn-sm" style="margin-left:6px">批量转人工</button>
+    </div>
+    <div id="loading-list" style="text-align:center;padding:40px;color:#9ca3af"><div class="loading-spinner"></div><div style="margin-top:8px;font-size:13px">加载中...</div></div>
+    <div id="list-table" style="display:none;overflow-x:auto">
+      <table><thead><tr><th><input type="checkbox" id="select-all" onchange="toggleAll()" title="全选"></th><th>工单号</th><th>提交人</th><th>内容</th><th>分类</th><th>状态</th><th>SLA</th><th>处理人</th></tr></thead><tbody id="list-rows"></tbody></table>
+    </div>
+    <div id="empty-list" style="display:none;text-align:center;padding:40px;color:#9ca3af;font-size:13px">暂无记录</div>
+  </div>
+</div>
+
+<!-- ============ VIEW: Knowledge ============ -->
+<div id="view-models" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#EDFDF3;display:flex;align-items:center;justify-content:center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#35A85B" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div><div style="font-weight:600;font-size:15px;color:#111827">AI 模型设置</div><div style="font-size:12px;color:#9ca3af">选择 AI 提供商并输入 API Key，立即生效无需重启</div></div>
+    </div>
+    <div id="model-current" style="display:none;padding:12px 16px;background:#EDFDF3;border-radius:8px;margin-bottom:16px;font-size:13px">
+      <span style="font-weight:500">当前模型: </span>
+      <span id="model-current-name" style="color:#35A85B;font-weight:600"></span>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">选择 AI 提供商</label>
+      <div id="provider-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px"></div>
+    </div>
+    <div id="config-form" style="display:none">
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">模型版本 <span style="color:#9ca3af;font-weight:400">（如 deepseek-chat、qwen-plus、gpt-4o）</span></label>
+        <input id="model-input" type="text" placeholder="输入模型名称..." style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">API Key</label>
+        <div style="display:flex;gap:8px">
+          <input id="api-key-input" type="password" placeholder="输入 API Key..." style="flex:1;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none">
+          <button onclick="toggleApiKeyVisibility()" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:14px">&#x1F441;</button>
+        </div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px"><span id="provider-signup"></span></div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">API 地址 <span style="color:#9ca3af;font-weight:400">(可选，默认使用官方地址)</span></label>
+        <input id="base-url-input" type="text" placeholder="https://..." style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="testModelConnection()" id="test-btn" class="btn btn-outline">
+          <span id="test-btn-text">&#x1F504; 测试连接</span>
+          <div id="test-spinner" class="loading-spinner" style="display:none;width:16px;height:16px"></div>
+        </button>
+        <button onclick="saveModelConfig()" id="save-btn" class="btn btn-primary" style="flex:1;justify-content:center">
+          <span id="save-btn-text">&#x1F4BE; 保存并切换</span>
+          <div id="save-spinner" class="loading-spinner" style="display:none;width:16px;height:16px"></div>
+        </button>
+      </div>
+      <div id="config-result" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-size:13px"></div>
+    </div>
+  </div>
+  <div id="saved-configs" style="display:none" class="content-card">
+    <div style="font-weight:600;font-size:14px;margin-bottom:12px">已保存的配置</div>
+    <div id="saved-configs-list"></div>
+  </div>
+</div>
+
+<div id="view-knowledge" style="display:none" class="fade-in">
+  <div class="content-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><div class="page-title">知识库</div><div class="page-subtitle">企业知识文档</div></div>
+      <div style="display:flex;gap:8px">
+        <select id="kb-category-filter" onchange="loadKnowledge()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px">
+          <option value="">全部分类</option>
+          <option value="IT">IT</option>
+          <option value="HR">HR</option>
+          <option value="财务">财务</option>
+          <option value="运维">运维</option>
+        </select>
+        <button onclick="showAddKnowledge()" class="btn btn-primary btn-sm">+ 新增</button>
+      </div>
+    </div>
+    <div id="loading-kb" style="text-align:center;padding:40px;color:#9ca3af"><div class="loading-spinner"></div><div style="margin-top:8px;font-size:13px">加载中...</div></div>
+    <div id="kb-list" style="display:none"></div>
+    <div id="empty-kb" style="display:none;text-align:center;padding:40px;color:#9ca3af;font-size:13px">暂无文档</div>
+  </div>
+  <!-- Add KB Modal -->
+  <div id="kb-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)closeAddKnowledge()">
+    <div style="background:#fff;border-radius:16px;padding:24px;width:500px;max-width:90%;max-height:80vh;overflow-y:auto">
+      <div style="font-weight:600;font-size:16px;margin-bottom:16px">新增知识库文档</div>
+      <select id="kb-new-category" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-bottom:12px">
+        <option value="IT">IT</option><option value="HR">HR</option><option value="财务">财务</option><option value="运维">运维</option>
+      </select>
+      <textarea id="kb-new-content" rows="8" placeholder="文档内容..." style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none;resize:vertical;margin-bottom:12px"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="closeAddKnowledge()" class="btn btn-outline">取消</button>
+        <button onclick="saveKnowledge()" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VIEW: Dashboard ============ -->
+<div id="view-dashboard" style="display:none" class="fade-in">
+  <div class="page-title" style="margin-bottom:4px">仪表盘</div>
+  <div class="page-subtitle" style="margin-bottom:16px">系统运行概览</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+    <div class="content-card" style="text-align:center;padding:20px">
+      <div style="font-size:28px;font-weight:700;color:#35A85B" id="dash-total">-</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px">总工单</div>
+    </div>
+    <div class="content-card" style="text-align:center;padding:20px">
+      <div style="font-size:28px;font-weight:700;color:#3b82f6" id="dash-pending">-</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px">待处理</div>
+    </div>
+    <div class="content-card" style="text-align:center;padding:20px">
+      <div style="font-size:28px;font-weight:700;color:#f59e0b" id="dash-escalated">-</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px">转人工</div>
+    </div>
+    <div class="content-card" style="text-align:center;padding:20px">
+      <div style="font-size:28px;font-weight:700;color:#35A85B" id="dash-rate">-</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px">自动解决率</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="content-card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:12px">按分类</div>
+      <div id="dash-category-chart"></div>
+    </div>
+    <div class="content-card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:12px">按状态</div>
+      <div id="dash-status-chart"></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+    <div class="content-card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">反馈统计</div>
+      <div id="dash-feedback" style="font-size:13px;color:#6b7280"></div>
+    </div>
+    <div class="content-card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">进化系统</div>
+      <div id="dash-evolution" style="font-size:13px;color:#6b7280"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div id="detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center" onclick="if(event.target===this)document.getElementById('detail-modal').style.display='none'">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:600px;max-width:90%;max-height:80vh;overflow-y:auto">
+    <div id="detail-content" style="font-size:14px"></div>
+    <div style="margin-top:16px;text-align:right"><button onclick="document.getElementById('detail-modal').style.display='none'" class="btn btn-outline btn-sm">关闭</button></div>
+  </div>
+</div>
+
+<script>
+// ===== State =====
+let _currentUser = null;
+let _uploadedImages = [];
+let _lastFeedback = {type:'neutral',rating:3};
+let _token = null;        // 启动时默认为未登录状态
+let _userData = null;
+
+// ===== Utils =====
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t||'';return d.innerHTML}
+function catColor(c){return{IT:'bg-blue-100 text-blue-700',HR:'bg-purple-100 text-purple-700','财务':'bg-green-100 text-green-700','运维':'bg-orange-100 text-orange-700','其他':'bg-gray-100 text-gray-700'}[c]||'bg-gray-100 text-gray-700'}
+function statusBadge(s){const m={'待处理':'bg-gray-100 text-gray-600','处理中':'bg-blue-100 text-blue-700','待确认':'bg-yellow-100 text-yellow-700','待审批':'bg-purple-100 text-purple-700','已解决':'bg-green-100 text-green-700','已转人工':'bg-orange-100 text-orange-700'};const c=m[s]||'bg-gray-100 text-gray-600';return `<span class="badge ${c}">${s||'-'}</span>`}
+
+function showToast(msg,type='success'){const c=document.getElementById('toast-container');const t=document.createElement('div');t.textContent=msg;t.style.cssText=`padding:10px 16px;border-radius:8px;background:${type==='success'?'#35A85B':type==='error'?'#ef4444':'#3b82f6'};color:#fff;font-size:13px;animation:fadeIn .3s ease`;c.appendChild(t);setTimeout(()=>t.remove(),3000)}
+
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebar-overlay').classList.toggle('open')}
+function toggleTheme(){document.documentElement.classList.toggle('dark')}
+function logout(){localStorage.clear();_currentUser=null;_token=null;location.reload()}
+
+// ===== Views =====
+// ===== 模型设置（前端配置 AI 模型，无需改代码）=====
+let _selectedProvider = null;
+
+async function loadModelStatus() {
+  const current = document.getElementById('model-current');
+  try {
+    const r = await authFetch('/api/models/status');
+    const d = await r.json();
+    if (!d.success) return;
+
+    if (d.current_model && d.current_model !== '未配置') {
+      current.style.display = 'block';
+      document.getElementById('model-current-name').textContent = d.current_model;
+    } else {
+      current.style.display = 'none';
+    }
+
+    // Provider 列表
+    document.getElementById('provider-list').innerHTML = d.available_providers.map(function(p) {
+      return '<div onclick="selectProvider(\'' + p.id + '\')" id="prov-' + p.id + '" ' +
+        'style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all .15s" ' +
+        'onmouseover="this.style.borderColor=\'#35A85B\'" onmouseout="this.style.borderColor=\'#e5e7eb\'">' +
+        '<div style="font-weight:500;font-size:13px">' + p.name + '</div>' +
+        '<div style="font-size:11px;color:#9ca3af;margin:2px 0">' + escapeHtml(p.description) + '</div>' +
+        '<div style="font-size:11px;color:#35A85B">' + p.models[0] + '</div></div>';
+    }).join('');
+
+    // 已保存配置
+    if (d.configs && d.configs.length > 0) {
+      document.getElementById('saved-configs').style.display = 'block';
+      document.getElementById('saved-configs-list').innerHTML = d.configs.map(function(c) {
+        var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px">';
+        html += '<div><span style="font-weight:500;font-size:13px">' + escapeHtml(c.label) + '</span> ';
+        html += '<span style="font-size:12px;color:#6b7280">' + escapeHtml(c.model) + '</span>';
+        if (c.is_active) html += '<span style="margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11px;background:#EDFDF3;color:#35A85B">当前</span>';
+        html += '<div style="font-size:11px;color:#9ca3af">Key: ' + escapeHtml(c.api_key_masked || '***') + '</div></div>';
+        if (!c.is_active) html += '<button onclick="switchToSavedConfig(\'' + c.provider_id + '\')" class="btn btn-outline btn-sm">切换</button>';
+        html += '</div>';
+        return html;
+      }).join('');
+    }
+  } catch(e) {
+    console.error('loadModelStatus error:', e);
+  }
+}
+
+function selectProvider(providerId) {
+  document.querySelectorAll('#provider-list > div').forEach(function(el) {
+    el.style.borderColor = '#e5e7eb';
+    el.style.background = 'transparent';
+  });
+  var el = document.getElementById('prov-' + providerId);
+  if (el) { el.style.borderColor = '#35A85B'; el.style.background = '#EDFDF3'; }
+  _selectedProvider = providerId;
+
+  fetch('/providers').then(function(r) { return r.json(); }).then(function(d) {
+    var p = d.available_providers.find(function(x) { return x.id === providerId; });
+    if (!p) return;
+    document.getElementById('config-form').style.display = 'block';
+
+    // 填充默认模型到输入框
+    document.getElementById('model-input').value = p.default_model;
+
+    var urls = {deepseek:'https://api.deepseek.com/v1',kimi:'https://api.moonshot.cn/v1',zhipu:'https://open.bigmodel.cn/api/paas/v4',yi:'https://api.lingyiwanwu.com/v1',doubao:'https://ark.cn-beijing.volces.com/api/v3'};
+    document.getElementById('base-url-input').value = urls[providerId] || '';
+    document.getElementById('provider-signup').innerHTML = '还没 Key？<a href="' + p.signup_url + '" target="_blank" style="color:#35A85B">去 ' + p.name + ' 获取</a>';
+    document.getElementById('config-result').style.display = 'none';
+  });
+}
+
+function toggleApiKeyVisibility() {
+  var input = document.getElementById('api-key-input');
+  input.type = (input.type === 'password' ? 'text' : 'password');
+}
+
+async function testModelConnection() {
+  var txt = document.getElementById('test-btn-text');
+  var spin = document.getElementById('test-spinner');
+  txt.style.display = 'none'; spin.style.display = 'inline-block';
+  try {
+    var r = await authFetch('/api/models/configure', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ provider_id:_selectedProvider, model:document.getElementById('model-input').value,
+        api_key:document.getElementById('api-key-input').value, base_url:document.getElementById('base-url-input').value, test_only:true }) });
+    var d = await r.json();
+    showConfigResult(d.success, d.message || '连接成功');
+  } catch(e) { showConfigResult(false, '连接失败: ' + (e.message || '请检查 API Key')); }
+  txt.style.display = 'inline'; spin.style.display = 'none';
+}
+
+async function saveModelConfig() {
+  var txt = document.getElementById('save-btn-text');
+  var spin = document.getElementById('save-spinner');
+  txt.style.display = 'none'; spin.style.display = 'inline-block';
+  try {
+    var r = await authFetch('/api/models/configure', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ provider_id:_selectedProvider, model:document.getElementById('model-input').value,
+        api_key:document.getElementById('api-key-input').value, base_url:document.getElementById('base-url-input').value }) });
+    var d = await r.json();
+    showConfigResult(d.success, d.message || '保存成功');
+    if (d.success) {
+      document.getElementById('model-current').style.display = 'block';
+      document.getElementById('model-current-name').textContent = d.current_model;
+      loadModelStatus();
+      showToast('模型已切换: ' + (d.current_model || ''), 'success');
+    }
+  } catch(e) { showConfigResult(false, '配置失败: ' + (e.message || '请重试')); }
+  txt.style.display = 'inline'; spin.style.display = 'none';
+}
+
+async function switchToSavedConfig(providerId) {
+  var r = await authFetch('/api/models/switch/' + providerId, { method:'POST' });
+  var d = await r.json();
+  if (d.success) { showToast('已切换到: ' + (d.message || ''), 'success'); loadModelStatus(); }
+}
+
+function showConfigResult(success, msg) {
+  var el = document.getElementById('config-result');
+  el.style.display = 'block';
+  el.style.background = success ? '#EDFDF3' : '#FEF2F2';
+  el.style.color = success ? '#228547' : '#DC2626';
+  el.textContent = msg;
+}
+
+function showView(view){
+  document.querySelectorAll('.main > [id^="view-"]').forEach(v=>v.style.display='none');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const el=document.getElementById('view-'+view);if(el)el.style.display='block';
+  const nav=document.querySelector(`.nav-item[data-view="${view}"]`);if(nav)nav.classList.add('active');
+  document.getElementById('header-title').textContent=nav?nav.querySelector('span').textContent:view;
+  const subs={submit:'AI 自动分类处理',my:'查看您的工单',queue:'部门待处理工单',approvals:'需审批的工单',list:'历史工单记录',knowledge:'知识库文档',dashboard:'系统运行概览'};
+  document.getElementById('header-subtitle').textContent=subs[view]||'';
+  if(view==='my')loadMyTickets();if(view==='queue')loadQueue();if(view==='approvals')loadApprovals();if(view==='list')loadTicketList();if(view==='knowledge')loadKnowledge();if(view==='dashboard')loadDashboard();
+}
+
+// ===== Login =====
+// ===== 登录/登出 =====
+function showLogin() {
+  document.getElementById('view-login').style.display = 'flex';
+  document.getElementById('view-login').scrollIntoView({behavior:'smooth'});
+}
+
+async function doLogin(){
+  const user=document.getElementById('login-user').value;
+  const pass=document.getElementById('login-password').value;
+  const err=document.getElementById('login-error');
+  try{
+    const r=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:user,password:pass})});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.detail||'登录失败';err.style.display='block';return}
+    localStorage.setItem('token',d.access_token);localStorage.setItem('user',JSON.stringify(d));
+    _currentUser=d;_token=d.access_token;
+    document.getElementById('view-login').style.display='none';
+    document.getElementById('app-header').style.display='flex';
+    document.getElementById('login-btn-header').style.display='none';
+    document.getElementById('logout-btn-header').style.display='inline-block';
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.querySelector('#sidebar-username').textContent=d.name||d.user_id;
+    document.getElementById('header-username').textContent=d.name||d.user_id;
+    document.querySelector('.mobile-menu-btn').style.display='block';
+    if(d.role!=='employee')document.getElementById('nav-queue').classList.remove('hidden');
+    if(d.role==='manager'||d.role==='admin')document.getElementById('nav-approvals').classList.remove('hidden');
+    showView('submit');
+    loadMyTickets();loadQueue();
+  }catch(e){err.textContent='连接失败';err.style.display='block'}
+}
+
+// ===== API helper =====
+async function authFetch(url,opts={}){
+  if(!_token) return fetch(url,opts);
+  const h=opts.headers||{};h['Authorization']='Bearer '+_token;
+  const r=await fetch(url,{...opts,headers:h});
+  if(r.status===401){_token=null;localStorage.removeItem('token');showToast('登录已过期，部分功能受限','error')}
+  return r
+}
+
+// ===== Submit =====
+async function handleFiles(files){for(const f of files){if(!f.type.startsWith('image/'))continue;if(f.size>20*1024*1024){showToast('文件过大','error');continue}
+    const fd=new FormData();fd.append('file',f);
+    const r=await fetch('/upload',{method:'POST',body:fd});const d=await r.json();
+    if(!r.ok)continue;_uploadedImages.push(d.url);
+    const c=document.getElementById('image-preview');const p=document.createElement('div');p.style.cssText='position:relative;display:inline-block';
+    p.innerHTML=`<img src="${d.url}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb"><button onclick="removeImage('${d.url}',this)" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;font-size:10px;border:none;cursor:pointer">×</button>`;
+    c.appendChild(p)}
+}
+
+function removeImage(url,btn){_uploadedImages=_uploadedImages.filter(u=>u!==url);btn.closest('div').remove()}
+
+async function submitTicketWithImages(){
+  const content=document.getElementById('ticket-content').value.trim();if(!content){showToast('请输入工单内容','error');return}
+  const dept=document.getElementById('dept-select').value;
+  const btn=document.getElementById('submit-btn');const sp=document.getElementById('btn-spinner');btn.disabled=true;document.getElementById('btn-text').textContent='处理中...';sp.style.display='inline-block';
+  try{
+    const body={content,session_id:'web_'+Date.now(),images:_uploadedImages};
+    if(dept)body.category=dept;
+    // 已登录用 authFetch，未登录用公开接口
+    const r = _token ? await authFetch('/ticket',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+                     : await fetch('/api/ticket/public',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();if(!r.ok)throw new Error(d.detail);
+    showResult(d);showToast('处理完成','success')
+  }catch(e){showToast('失败: '+e.message,'error')}finally{btn.disabled=false;document.getElementById('btn-text').textContent='提交工单';sp.style.display='none'}
+}
+
+async function submitTicketStream(){
+  const content=document.getElementById('ticket-content').value.trim();if(!content)return
+  const p=document.getElementById('stream-progress');const st=document.getElementById('stream-status');const se=document.getElementById('stream-steps');p.style.display='block';st.textContent='连接中...';se.innerHTML='';
+  try{
+    const r=await fetch('/ticket/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content,session_id:'stream_'+Date.now(),images:_uploadedImages})});
+    const reader=r.body.getReader();const dec=new TextDecoder();let buf='';
+    while(true){const{done,value}=await reader.read();if(done)break;buf+=dec.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop()||''
+      let et='';for(const l of ls){if(l.startsWith('event:')){et=l.slice(7).trim()}else if(l.startsWith('data:')){const d=JSON.parse(l.slice(6));if(et==='step'){st.textContent=d.message||d.step
+        if(d.status==='complete'&&d.doc_count)se.innerHTML+=`<div style="font-size:12px;color:#6b7280">📚 检索到 ${d.doc_count} 篇</div>`
+        if(d.status==='complete'&&d.tool_calls)se.innerHTML+=`<div style="font-size:12px;color:#6b7280">🔧 执行了 ${d.tool_calls} 个工具</div>`
+      }if(et==='message'){document.getElementById('result-response').textContent=d.content}
+      if(et==='complete'){st.textContent=d.success?'✅ 完成':'❌ 失败';showResult(d)}}}}
+  }catch(e){st.textContent='连接失败'}
+}
+
+function showResult(data){
+  document.getElementById('result-card').style.display='block';document.getElementById('result-card').scrollIntoView({behavior:'smooth'});
+  document.getElementById('result-ticket-id').textContent=data.ticket_id;
+  document.getElementById('result-category').textContent=data.category;document.getElementById('result-category').className='badge '+(catColor(data.category)||'bg-gray-100 text-gray-700');
+  const s=document.getElementById('result-status');s.textContent=data.auto_resolved?'待确认':'已转人工';s.className='badge '+(data.auto_resolved?'bg-yellow-100 text-yellow-700':'bg-orange-100 text-orange-700');
+  document.getElementById('result-response').textContent=data.response;document.getElementById('result-elapsed').textContent=data.elapsed_seconds;document.getElementById('result-trace').textContent=data.trace_id;
+  const steps=document.getElementById('agent-steps');steps.innerHTML='';
+  const labels={'classify':{l:'工单分类',i:'🏷️'},'retrieve':{l:'知识库检索',i:'📚'},'execute':{l:'工具执行',i:'🔧'}};
+  (data.agent_steps||[]).forEach((s,i)=>{const info=labels[s.step]||{l:s.step,i:'📋'};steps.innerHTML+=`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0"><div style="font-size:14px">${info.i}</div><div><div style="font-weight:500;font-size:13px">${info.l}</div><div style="font-size:12px;color:#6b7280">${s.elapsed.toFixed(1)}s</div></div></div>`});
+  const sec=document.getElementById('confirm-section');if(data.auto_resolved){sec.style.display='block';document.getElementById('confirm-thanks').style.display='none'}else sec.style.display='none';
+  document.getElementById('feedback-thanks').style.display='none';document.getElementById('feedback-comment').value='';
+  document.querySelectorAll('.feedback-btn').forEach(b=>{b.disabled=false;b.className='btn btn-outline btn-sm'})
+}
+
+// ===== Confirm / Reject =====
+async function confirmResolved(){
+  const id=document.getElementById('result-ticket-id').textContent;if(!id)return
+  const r=await authFetch(`/ticket/${id}/confirm`,{method:'POST'});const d=await r.json()
+  if(d.success){const m=document.getElementById('confirm-thanks');m.textContent='✅ 已确认，工单已结束';m.style.display='block';document.querySelectorAll('#confirm-section button').forEach(b=>b.disabled=true);showToast('已确认','success')}
+}
+async function rejectEscalate(){
+  const id=document.getElementById('result-ticket-id').textContent;if(!id)return;if(!confirm('确定未解决？将转人工处理'))return
+  const r=await authFetch(`/ticket/${id}/reject`,{method:'POST'});const d=await r.json()
+  if(d.success){const m=document.getElementById('confirm-thanks');m.textContent='🔄 已转人工，请耐心等待';m.style.display='block';m.style.color='#f59e0b';document.querySelectorAll('#confirm-section button').forEach(b=>b.disabled=true);showToast('已转人工','info')}
+}
+
+// ===== Feedback =====
+function sendFeedback(t,r){document.querySelectorAll('.feedback-btn').forEach(b=>{b.className='btn btn-outline btn-sm'});document.getElementById('fb-'+t).className='btn btn-sm';document.getElementById('fb-'+t).style.background='#EDFDF3';_lastFeedback={type:t,rating:r}}
+async function submitFeedback(){
+  const id=document.getElementById('result-ticket-id').textContent;if(!id)return
+  const r=await authFetch('/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket_id:id,rating:_lastFeedback.rating,feedback_type:_lastFeedback.type,comment:document.getElementById('feedback-comment').value})});
+  const d=await r.json();if(d.feedback_id){document.getElementById('feedback-thanks').style.display='block';document.querySelectorAll('.feedback-btn').forEach(b=>b.disabled=true);showToast('感谢反馈','success')}
+}
+
+// ===== My Tickets =====
+async function loadMyTickets(){
+  if(!_currentUser)return;const loading=document.getElementById('loading-my');const table=document.getElementById('my-table');const empty=document.getElementById('empty-my');
+  loading.style.display='block';table.style.display='none';empty.style.display='none';
+  const isEng=_currentUser.role==='engineer'||_currentUser.role==='manager'||_currentUser.role==='admin';
+  document.getElementById('my-title').textContent=isEng?'我的待办':'我的工单';document.getElementById('my-subtitle').textContent=isEng?'分配给您的工单':'您提交的工单';
+  try{
+    const url='/api/org/queue/my?user_id='+_currentUser.user_id;
+    const r=await authFetch(url);const d=await r.json();loading.style.display='none';
+    if(!d||d.length===0){empty.style.display='block';return}
+    table.style.display='block';document.getElementById('my-rows').innerHTML=d.map(t=>{
+      const isP=t.status==='待处理'||t.status==='处理中'||t.status==='已转人工';
+      const isMine=t.assigned_name===_currentUser.name;
+      var actions = '<span class="text-blue-600 text-xs cursor-pointer hover:underline" onclick="event.stopPropagation();showTicketDetail(\'' + t.ticket_id + '\')">详情</span>';
+      if ((isP || t.status==='已转人工') && !isMine && isEng) actions = '<button onclick="event.stopPropagation();acceptTicket(\'' + t.ticket_id + '\')" class="btn btn-primary btn-sm">接单</button> <span class="text-blue-600 text-xs cursor-pointer hover:underline" onclick="event.stopPropagation();showTicketDetail(\'' + t.ticket_id + '\')">详情</span>';
+      else if (t.status==='处理中' && isMine) actions = '<button onclick="event.stopPropagation();resolveTicket(\'' + t.ticket_id + '\')" class="btn btn-primary btn-sm">完成</button> <span class="text-blue-600 text-xs cursor-pointer hover:underline" onclick="event.stopPropagation();showTicketDetail(\'' + t.ticket_id + '\')">详情</span>';
+      return '<tr class="cursor-pointer hover:bg-gray-50" onclick="showTicketDetail(\'' + t.ticket_id + '\')"><td class="font-mono text-blue-600 text-xs">' + escapeHtml(t.ticket_id) + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:12px">' + escapeHtml(t.content) + '</td><td><span class="badge ' + catColor(t.category) + '">' + (t.category||'-') + '</span></td><td>' + statusBadge(t.status) + '</td><td style="font-size:12px;color:#6b7280">' + (t.assigned_name||'-') + '</td><td>' + actions + '</td></tr>'
+    }).join('')
+  }catch(e){loading.style.display='none';empty.style.display='block';empty.textContent='加载失败'}
+}
+async function acceptTicket(id){
+  const r=await authFetch(`/api/org/queue/accept/${id}`,{method:'POST'});const d=await r.json()
+  if(d.success){showToast('已接单','success');loadMyTickets();loadQueue()}
+}
+async function resolveTicket(id){
+  if(!confirm('确认已完成此工单？')) return;
+  const r=await authFetch('/api/org/queue/resolve/'+id,{method:'POST'});const d=await r.json();
+  if(d.success){showToast('工单已完成','success');loadMyTickets();loadQueue()}else{showToast('操作失败:'+(d.detail||''),'error')}
+}
+
+// ===== Queue =====
+async function loadQueue(){
+  if(!_currentUser){ 
+    document.getElementById('loading-queue').style.display='none';
+    document.getElementById('empty-queue').style.display='block';
+    document.getElementById('empty-queue').textContent='请先登录';
+    return;
+  }
+  const loading=document.getElementById('loading-queue');const table=document.getElementById('queue-table');const empty=document.getElementById('empty-queue');
+  loading.style.display='block';table.style.display='none';empty.style.display='none';
+  try{
+    const statusFilter=document.getElementById('queue-status-filter').value;
+    let url;
+    if(_currentUser.department_id){
+      url='/api/org/queue/department/'+_currentUser.department_id+(statusFilter?'?status='+encodeURIComponent(statusFilter):'');
+    } else {
+      url='/api/org/queue/department/0?status='+(statusFilter||'已转人工');
+      document.getElementById('queue-title').textContent='转人工队列';
+      document.getElementById('queue-subtitle').textContent='待处理的转人工工单';
+    }const r=await authFetch(url);const d=await r.json();loading.style.display='none';
+    if(!d||d.length===0){empty.style.display='block';return}
+    table.style.display='block';document.getElementById('queue-rows').innerHTML=d.filter(t=>t.status!=='已解决').map(t=>`<tr class="cursor-pointer hover:bg-gray-50" onclick="showTicketDetail('${t.ticket_id}')"><td class="font-mono text-blue-600 text-xs">${escapeHtml(t.ticket_id)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:12px">${escapeHtml(t.content)}</td><td style="font-size:12px">${escapeHtml(t.user_name)||'-'}</td><td>${statusBadge(t.status)}</td><td><span class="badge ${t.priority==='urgent'?'bg-red-100 text-red-700':t.priority==='high'?'bg-orange-100 text-orange-700':'bg-gray-100 text-gray-600'}">${t.priority||'normal'}</span></td><td style="font-size:12px;color:#6b7280">${t.assigned_name||'-'}</td></tr>`).join('')
+  }catch(e){loading.style.display='none';empty.style.display='block'}
+}
+
+// ===== Approvals =====
+async function loadApprovals(){
+  if(!_currentUser){
+    document.getElementById('loading-approvals').style.display='none';
+    document.getElementById('empty-approvals').style.display='block';
+    document.getElementById('empty-approvals').textContent='请先登录';
+    return;
+  }
+  const loading=document.getElementById('loading-approvals');const table=document.getElementById('approvals-table');const empty=document.getElementById('empty-approvals');
+  loading.style.display='block';table.style.display='none';empty.style.display='none';
+  try{
+    const r=await authFetch('/api/org/approvals/pending');const d=await r.json();loading.style.display='none';
+    if(!d||d.length===0){empty.style.display='block';return}
+    table.style.display='block';document.getElementById('approvals-rows').innerHTML=d.map(t=>`<tr class="cursor-pointer hover:bg-gray-50" onclick="showTicketDetail('${t.ticket_id}')"><td class="font-mono text-blue-600 text-xs">${escapeHtml(t.ticket_id)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:12px">${escapeHtml(t.content)}</td><td style="font-size:12px">${escapeHtml(t.user_name)||'-'}</td><td><span class="badge ${catColor(t.category)}">${t.category||'-'}</span></td><td><button onclick="event.stopPropagation();processApproval('${t.ticket_id}','approve')" class="btn btn-primary btn-sm" style="margin-right:4px">通过</button><button onclick="event.stopPropagation();processApproval('${t.ticket_id}','reject')" class="btn btn-outline btn-sm">驳回</button></td></tr>`).join('')
+  }catch(e){loading.style.display='none';empty.style.display='block'}
+}
+async function processApproval(id,action){
+  const r=await authFetch('/api/org/approvals/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket_id:id,action})});
+  if(r.ok){showToast(action==='approve'?'已审批通过':'已驳回','success');loadApprovals()}
+}
+
+// ===== List =====
+async function loadTicketList(){
+  const loading=document.getElementById('loading-list');const table=document.getElementById('list-table');const empty=document.getElementById('empty-list');
+  loading.style.display='block';table.style.display='none';empty.style.display='none';
+  try{
+    const r=await authFetch('/tickets?limit=30');const d=await r.json();loading.style.display='none';
+    if(!d||d.length===0){empty.style.display='block';document.getElementById('batch-toolbar').style.display='none';return}
+    table.style.display='block';document.getElementById('list-rows').innerHTML=d.map(t=>`<tr class="hover:bg-gray-50"><td style="width:30px" onclick="event.stopPropagation()"><input type="checkbox" class="ticket-checkbox" value="${t.ticket_id}" onchange="updateBatchToolbar()"></td><td class="font-mono text-blue-600 text-xs cursor-pointer" onclick="showTicketDetail('${t.ticket_id}')">${escapeHtml(t.ticket_id)}</td><td style="font-size:12px;cursor:pointer" onclick="showTicketDetail('${t.ticket_id}')">${escapeHtml(t.user_id)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:12px;cursor:pointer" onclick="showTicketDetail('${t.ticket_id}')">${escapeHtml(t.content)}</td><td onclick="event.stopPropagation()"><span class="badge ${catColor(t.category)}">${t.category||'-'}</span></td><td onclick="event.stopPropagation()">${statusBadge(t.status)}</td><td onclick="event.stopPropagation()">${t.sla_breached?'<span class="badge bg-red-100 text-red-700">⚠️ 超时</span>':t.sla_deadline?'<span class="badge bg-green-100 text-green-700">✓ 正常</span>':'<span class="badge bg-gray-100 text-gray-600">-</span>'}</td><td style="font-size:12px;color:#6b7280;cursor:pointer" onclick="showTicketDetail('${t.ticket_id}')">${escapeHtml(t.assignee)||'-'}</td></tr>`).join('')
+    document.getElementById('batch-toolbar').style.display='block'
+  }catch(e){loading.style.display='none';empty.style.display='block'}
+}
+async function showTicketDetail(id){
+  const r=await authFetch('/ticket/'+id);const d=await r.json()
+  document.getElementById('detail-content').innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px"><div><span style="color:#9ca3af">工单号</span><div style="font-family:monospace;font-weight:500">${escapeHtml(d.ticket_id)}</div></div><div><span style="color:#9ca3af">用户</span><div>${escapeHtml(d.user_id||'-')}</div></div><div><span style="color:#9ca3af">分类</span><div><span class="badge ${catColor(d.category)}">${d.category||'-'}</span></div></div><div><span style="color:#9ca3af">状态</div><div>${statusBadge(d.status)}</div></div>${d.sla_deadline?`<div><span style="color:#9ca3af">SLA 截止</span><div><span class="badge ${d.sla_breached?'bg-red-100 text-red-700':'bg-green-100 text-green-700'}">${new Date(d.sla_deadline).toLocaleString('zh-CN')}${d.sla_breached?' ⚠️ 已超时':' ✓ 正常'}</span></div></div>`:''}</div><hr style="margin:12px 0;border:none;border-top:1px solid #e5e7eb"><div style="color:#9ca3af;font-size:12px;margin-bottom:4px">内容</div><div style="font-size:13px;line-height:1.6">${escapeHtml(d.content)}</div>${d.agent_response?`<hr style="margin:12px 0;border:none;border-top:1px solid #e5e7eb"><div style="color:#9ca3af;font-size:12px;margin-bottom:4px">回复</div><div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${escapeHtml(d.agent_response)}</div>`:''}`;
+  document.getElementById('detail-modal').style.display='flex'
+}
+async function viewTicketDetail(){const id=document.getElementById('result-ticket-id').textContent;if(id)showTicketDetail(id)}
+function resetForm(){document.getElementById('result-card').style.display='none';document.getElementById('ticket-content').value='';_uploadedImages=[];document.getElementById('image-preview').innerHTML='';showView('submit')}
+
+// ===== Dashboard =====
+async function loadDashboard() {
+  try {
+    const r = await authFetch('/stats');
+    if (!r.ok) throw new Error('加载失败');
+    const d = await r.json();
+
+    document.getElementById('dash-total').textContent = d.tickets.total || 0;
+    document.getElementById('dash-pending').textContent = (d.tickets.by_status['待处理'] || 0) + (d.tickets.by_status['处理中'] || 0);
+    document.getElementById('dash-escalated').textContent = d.tickets.escalated || 0;
+    document.getElementById('dash-rate').textContent = (d.tickets.auto_resolve_rate * 100).toFixed(1) + '%';
+
+    // Category bar chart
+    var catData = d.tickets.by_category || {};
+    var catMax = Math.max.apply(null, Object.values(catData).concat([1]));
+    document.getElementById('dash-category-chart').innerHTML = Object.entries(catData).map(function(kv) {
+      var pct = (kv[1] / catMax * 100).toFixed(0);
+      var color = (catColor(kv[0]) || 'bg-gray-100').split(' ')[0];
+      return '<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span class="badge ' + color + '">' + kv[0] + '</span><span style="color:#6b7280">' + kv[1] + '</span></div><div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:#35A85B;border-radius:3px"></div></div></div>';
+    }).join('') || '<div style="color:#9ca3af;font-size:13px">暂无数据</div>';
+
+    // Status bar chart
+    var stData = d.tickets.by_status || {};
+    var stMax = Math.max.apply(null, Object.values(stData).concat([1]));
+    document.getElementById('dash-status-chart').innerHTML = Object.entries(stData).map(function(kv) {
+      var pct = (kv[1] / stMax * 100).toFixed(0);
+      return '<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>' + kv[0] + '</span><span style="color:#6b7280">' + kv[1] + '</span></div><div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:#3b82f6;border-radius:3px"></div></div></div>';
+    }).join('') || '<div style="color:#9ca3af;font-size:13px">暂无数据</div>';
+
+    // Feedback
+    var fb = d.feedback || {};
+    document.getElementById('dash-feedback').innerHTML = '总反馈: ' + (fb.total || 0) + '<br>平均评分: ' + (fb.avg_rating || 0) + '/5<br>好评: ' + (fb.positive || 0) + ' | 中评: ' + (fb.neutral || 0) + ' | 差评: ' + (fb.negative || 0) + '<br>待处理差评: ' + (fb.unresolved_negative || 0);
+
+    // Evolution
+    var ev = d.evolution || {};
+    var ac = ev.accuracy || {};
+    document.getElementById('dash-evolution').innerHTML = '复盘总数: ' + ((ev.reviews && ev.reviews.total) || 0) + '<br>准确率: ' + ((ac.accuracy || 0) * 100).toFixed(1) + '%<br>知识缺口: ' + ((ev.knowledge_gaps && ev.knowledge_gaps.unresolved) || 0) + '<br>模式数量: ' + (d.patterns && d.patterns.total || 0);
+  } catch(e) {
+    showToast('仪表盘加载失败', 'error');
+  }
+}
+
+// ===== Data Export =====
+async function exportTicketsCSV() {
+  try {
+    const r = await authFetch('/tickets/export');
+    if (!r.ok) { showToast('导出失败', 'error'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tickets_export.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('导出成功', 'success');
+  } catch(e) {
+    showToast('导出失败: ' + e.message, 'error');
+  }
+}
+
+// ===== Batch Operations =====
+function toggleAll() {
+  var checked = document.getElementById('select-all').checked;
+  document.querySelectorAll('.ticket-checkbox').forEach(function(cb) { cb.checked = checked; });
+  updateBatchToolbar();
+}
+
+function updateBatchToolbar() {
+  var ids = [];
+  document.querySelectorAll('.ticket-checkbox:checked').forEach(function(cb) { ids.push(cb.value); });
+  document.getElementById('batch-count').textContent = '已选 ' + ids.length + ' 个';
+}
+
+function getSelectedIds() {
+  var ids = [];
+  document.querySelectorAll('.ticket-checkbox:checked').forEach(function(cb) { ids.push(cb.value); });
+  return ids;
+}
+
+async function batchClose() {
+  var ids = getSelectedIds();
+  if (ids.length === 0) { showToast('请先选择工单', 'error'); return; }
+  if (!confirm('确定批量关闭 ' + ids.length + ' 个工单？仅已解决状态的工单会生效。')) return;
+  var r = await authFetch('/tickets/batch/close', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ticket_ids:ids}) });
+  var d = await r.json();
+  if (d.success) { showToast('已关闭 ' + d.count + ' 个工单', 'success'); loadTicketList(); }
+  else { showToast('操作失败', 'error'); }
+}
+
+async function batchEscalate() {
+  var ids = getSelectedIds();
+  if (ids.length === 0) { showToast('请先选择工单', 'error'); return; }
+  if (!confirm('确定批量转人工 ' + ids.length + ' 个工单？')) return;
+  var r = await authFetch('/tickets/batch/escalate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ticket_ids:ids}) });
+  var d = await r.json();
+  if (d.success) { showToast('已转人工 ' + d.count + ' 个工单', 'success'); loadTicketList(); }
+  else { showToast('操作失败', 'error'); }
+}
+
+// ===== Knowledge =====
+async function loadKnowledge(){
+  const loading=document.getElementById('loading-kb');const list=document.getElementById('kb-list');const empty=document.getElementById('empty-kb');
+  loading.style.display='block';list.style.display='none';empty.style.display='none'
+  try{
+    const cat=document.getElementById('kb-category-filter').value;const r=await authFetch('/knowledge'+(cat?'?category='+cat:''));const d=await r.json();loading.style.display='none'
+    if(!d||d.length===0){empty.style.display='block';return}
+    list.style.display='block';list.innerHTML=d.map(doc=>`<div style="padding:16px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="alert('${escapeHtml(doc.content).substring(0,200)}...')"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><span class="badge ${catColor(doc.category)}">${doc.category||'-'}</span><span style="font-size:11px;color:#9ca3af">${escapeHtml(doc.source||'')}</span></div><div style="font-size:13px;color:#374151;white-space:pre-wrap">${escapeHtml(doc.content.substring(0,200))}${doc.content.length>200?'...':''}</div></div>`).join('')
+  }catch(e){loading.style.display='none';empty.style.display='block'}
+}
+function showAddKnowledge(){document.getElementById('kb-modal').style.display='flex'}
+function closeAddKnowledge(){document.getElementById('kb-modal').style.display='none'}
+async function saveKnowledge(){
+  const cat=document.getElementById('kb-new-category').value;const content=document.getElementById('kb-new-content').value.trim();if(!content){showToast('请输入文档内容','error');return}
+  const r=await authFetch('/knowledge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content,category:cat})});
+  if(r.ok){showToast('已保存','success');closeAddKnowledge();document.getElementById('kb-new-content').value='';loadKnowledge()}
+}
+
+// ===== Init =====
+// ===== Init — 默认显示工单提交页（无需登录）=====
+_currentUser=_userData;
+document.getElementById('view-login').style.display='none';
+document.getElementById('login-btn-header').style.display='inline-block';
+document.getElementById('logout-btn-header').style.display='none';
+showView('submit');
+// 如果已登录，显示用户信息
+if(_token&&_userData){
+  document.querySelector('#sidebar-username').textContent=_userData.name||_userData.user_id;
+  document.getElementById('header-username').textContent=_userData.name||_userData.user_id;
+  document.querySelector('.mobile-menu-btn').style.display='block';
+  if(_userData.role!=='employee')document.getElementById('nav-queue').classList.remove('hidden');
+  if(_userData.role==='manager'||_userData.role==='admin')document.getElementById('nav-approvals').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

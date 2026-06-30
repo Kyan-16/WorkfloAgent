@@ -1,45 +1,66 @@
 # ============================================================
-# Agent Template - 基础配置
+# WorkfloAgent - 全局配置
 # ============================================================
 
-app_name: "Agent Template"
+app_name: "WorkfloAgent"
 version: "1.0.0"
 log_level: "INFO"
 prompts_dir: "prompts"
 
 # ---------- LLM 配置 ----------
 llm:
-  provider: "dashscope"          # dashscope / openai
-  model: "qwen-plus"
-  api_key: ""                    # 建议通过环境变量 AGENT_LLM_API_KEY 设置
-  base_url: null                 # OpenAI 兼容接口地址
-  temperature: 0.7
-  max_tokens: 2048
-  top_p: 0.9
-  timeout: 60
+  provider: "openai"
+  model: "deepseek-chat"
+  api_key: ""
+  base_url: "https://api.deepseek.com/v1"
+  temperature: 0.3
+  max_tokens: 4096
+  timeout: 120
+
+# ---------- Agent 配置 ----------
+agent:
+  use_langgraph: false
+  max_tool_rounds: 5
+  rag_top_k: 5
+  memory_window_size: 10
 
 # ---------- RAG 配置 ----------
 rag:
   enabled: false
   embedding_provider: "dashscope"
   embedding_model: "text-embedding-v3"
-  embedding_api_key: ""
-  embedding_dimension: 1024
+  top_k: 5
   qdrant_host: "localhost"
   qdrant_port: 6333
-  qdrant_grpc_port: 6334
-  qdrant_use_grpc: true
-  collection_name: "agent_docs"
-  top_k: 5
-  score_threshold: 0.5
+
+# ---------- Cross-encoder 配置 ----------
+cross_encoder:
+  enabled: false
+  mode: "llm"
+  model_name: ""
+
+# ---------- Embedding 配置 ----------
+embedding:
+  provider: "dashscope"
+  model: "text-embedding-v2"
+  api_key: ""
+
+# ---------- 监控配置 ----------
+monitoring:
+  prometheus_enabled: true
+  trace_enabled: true
+  trace_file: "traces/agent_runs.jsonl"
+
+# ---------- 存储配置 ----------
+storage:
+  database_url: "sqlite:///data/ticket_agent.db"
+  upload_dir: "uploads"
+  max_upload_size: 20971520
 
 # ---------- Memory 配置 ----------
 memory:
-  backend: "local"               # local / redis
+  backend: "local"
   max_history: 20
-  redis_url: "redis://localhost:6379/0"
-  redis_prefix: "agent:memory:"
-  ttl_seconds: 86400
 
 # ---------- Server 配置 ----------
 server:

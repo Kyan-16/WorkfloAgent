@@ -12,13 +12,12 @@ LLM 多模型抽象层
 """
 
 from llm.base import LLMBase, LLMResponse, ChatMessage
-from llm.factory import LLMFactory, create_llm, list_providers, register_provider
+from llm.factory import create_llm, list_providers, register_provider
 
 __all__ = [
     "LLMBase",
     "LLMResponse",
     "ChatMessage",
-    "LLMFactory",
     "create_llm",
     "list_providers",
     "register_provider",

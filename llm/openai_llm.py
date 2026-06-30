@@ -17,6 +17,7 @@ import logging
 from typing import Optional, AsyncIterator
 
 from llm.base import LLMBase, LLMResponse, ChatMessage
+from utils.token_bucket import consume_llm_token
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,10 @@ class OpenAILLM(LLMBase):
         try:
             client = self._get_client()
             formatted_messages = [m.to_dict() for m in messages]
+
+            # 令牌桶限流
+            if not consume_llm_token(tokens=1, timeout=30.0):
+                raise TimeoutError("LLM API 调用被限流（等待超时）")
 
             call_kwargs = {
                 "model": self.model,
@@ -157,6 +162,10 @@ class OpenAILLM(LLMBase):
         try:
             client = self._get_client()
             formatted_messages = [m.to_dict() for m in messages]
+
+            # 令牌桶限流（流式调用也消耗令牌）
+            if not consume_llm_token(tokens=1, timeout=30.0):
+                raise TimeoutError("LLM API 调用被限流（等待超时）")
 
             call_kwargs = {
                 "model": self.model,

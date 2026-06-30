@@ -15,6 +15,7 @@ import logging
 from typing import Any, Optional
 
 from skills.base import Skill
+from utils.json_parser import safe_parse_json, parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -81,60 +82,9 @@ class JsonExtractorSkill(Skill):
     @staticmethod
     def extract_json(text: str) -> Optional[Any]:
         """
-        从文本中提取 JSON（静态方法，可直接调用）
-
-        处理流程：
-        1. 尝试提取 ```json ... ``` 代码块
-        2. 尝试提取 ``` ... ``` 代码块
-        3. 定位第一个 { 和最后一个 } 之间的内容
-        4. 修复尾随逗号
-        5. 解析 JSON
+        从文本中提取 JSON（委托给 utils.json_parser.safe_parse_json）
 
         :param text: 包含 JSON 的文本
-        :return: 解析后的 Python 对象
+        :return: 解析后的 Python 对象，失败返回 None
         """
-        if not text or not text.strip():
-            return None
-
-        text = text.strip()
-
-        # Step 1: 尝试提取 ```json 代码块
-        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            # Step 2: 尝试提取 ``` 代码块
-            code_match = re.search(r'```\s*([\s\S]*?)\s*```', text)
-            if code_match:
-                json_str = code_match.group(1)
-            else:
-                json_str = text
-
-        # Step 3: 定位 JSON 边界
-        # 尝试找到 JSON 对象
-        start_idx = json_str.find('{')
-        end_idx = json_str.rfind('}')
-
-        # 也尝试 JSON 数组
-        arr_start = json_str.find('[')
-        arr_end = json_str.rfind(']')
-
-        # 选择更早出现的那个
-        if start_idx != -1 and end_idx > start_idx:
-            if arr_start != -1 and arr_start < start_idx:
-                json_str = json_str[arr_start:arr_end + 1]
-            else:
-                json_str = json_str[start_idx:end_idx + 1]
-        elif arr_start != -1 and arr_end > arr_start:
-            json_str = json_str[arr_start:arr_end + 1]
-
-        # Step 4: 修复尾随逗号
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
-
-        # Step 5: 解析 JSON
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON 解析失败: {e}, 内容: {json_str[:200]}...")
-            return None
+        return safe_parse_json(text, default=None)

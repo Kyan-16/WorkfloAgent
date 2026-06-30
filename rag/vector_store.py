@@ -2,6 +2,8 @@
 向量存储抽象层
 
 支持 Qdrant 向量数据库，预留 Chroma/FAISS 接口。
+
+所有 I/O 操作均为 async，使用 Qdrant 异步客户端避免阻塞事件循环。
 """
 import uuid
 import logging
@@ -27,11 +29,11 @@ class VectorStoreBase(ABC):
 
 class QdrantVectorStore(VectorStoreBase):
     """
-    Qdrant 向量存储
+    Qdrant 向量存储（使用异步客户端）
 
     使用示例：
-        from rag.embeddings import DashScopeEmbedding
-        embedding = DashScopeEmbedding(api_key="sk-xxx")
+        from rag.embeddings import create_embedding
+        embedding = create_embedding(provider="dashscope", api_key="sk-xxx")
         store = QdrantVectorStore(
             collection_name="my_knowledge",
             embedding=embedding,
@@ -65,9 +67,9 @@ class QdrantVectorStore(VectorStoreBase):
         self.embedding_dim = dimension or embedding_dim
         self.score_threshold = score_threshold
 
-    def _get_client(self):
-        """获取 Qdrant 客户端"""
-        from qdrant_client import QdrantClient
+    async def _get_client(self):
+        """获取 Qdrant 异步客户端"""
+        from qdrant_client import AsyncQdrantClient
 
         kwargs = {
             "url": f"http://{self.host}:{self.port}",
@@ -79,18 +81,18 @@ class QdrantVectorStore(VectorStoreBase):
         if self.api_key:
             kwargs["api_key"] = self.api_key
 
-        return QdrantClient(**kwargs)
+        return AsyncQdrantClient(**kwargs)
 
-    def _ensure_collection(self, client):
-        """确保 Collection 存在"""
+    async def _ensure_collection(self, client):
+        """确保 Collection 存在（异步）"""
         from qdrant_client.http import models
 
-        collections = client.get_collections().collections
-        names = [c.name for c in collections]
+        collections = await client.get_collections()
+        names = [c.name for c in collections.collections]
 
         if self.collection_name not in names:
             logger.info(f"创建 Collection: {self.collection_name}")
-            client.create_collection(
+            await client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=models.VectorParams(
                     size=self.embedding_dim,
@@ -107,10 +109,10 @@ class QdrantVectorStore(VectorStoreBase):
         try:
             from qdrant_client.http import models
 
-            client = self._get_client()
-            self._ensure_collection(client)
+            client = await self._get_client()
+            await self._ensure_collection(client)
 
-            vectors = self.embedding.embed_documents(texts)
+            vectors = await self.embedding.embed_documents(texts)
             if not vectors:
                 return []
 
@@ -128,16 +130,17 @@ class QdrantVectorStore(VectorStoreBase):
                     )
                 )
 
-            client.upsert(
+            await client.upsert(
                 collection_name=self.collection_name,
                 points=points,
                 wait=True,
             )
             logger.info(f"添加 {len(points)} 条文档到 {self.collection_name}")
+            await client.close()
             return ids
         except Exception as e:
             logger.error(f"向量存储添加失败: {e}")
-            return []
+            raise
 
     async def similarity_search(
         self,
@@ -145,11 +148,12 @@ class QdrantVectorStore(VectorStoreBase):
         k: int = 5,
         filter: Optional[dict] = None,
     ) -> list[dict]:
-        """相似度检索"""
+        """相似度检索（异步）"""
         try:
-            client = self._get_client()
-            query_vector = self.embedding.embed_query(query)
+            client = await self._get_client()
+            query_vector = await self.embedding.embed_query(query)
             if not query_vector:
+                await client.close()
                 return []
 
             query_params: dict[str, Any] = {
@@ -169,7 +173,7 @@ class QdrantVectorStore(VectorStoreBase):
                 ]
                 query_params["query_filter"] = models.Filter(must=conditions)
 
-            results = client.query_points(**query_params)
+            results = await client.query_points(**query_params)
 
             docs = []
             for hit in results.points:
@@ -182,7 +186,8 @@ class QdrantVectorStore(VectorStoreBase):
                     })
 
             logger.info(f"检索完成: 原始={len(results.points)}, 过滤后={len(docs)}")
+            await client.close()
             return docs
         except Exception as e:
             logger.error(f"向量检索失败: {e}")
-            return []
+            raise

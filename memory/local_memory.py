@@ -6,6 +6,7 @@
 
 注意：进程重启后数据丢失，生产环境请使用 RedisMemory。
 """
+import asyncio
 from collections import defaultdict
 
 from memory.base import MemoryBase, MemoryMessage
@@ -31,6 +32,7 @@ class LocalMemory(MemoryBase):
         """
         self._store: dict[str, list[MemoryMessage]] = defaultdict(list)
         self._max_messages = max_history if max_history is not None else max_messages
+        self._lock = asyncio.Lock()
 
     async def add(self, session_id: str, role: str, content: str) -> bool:
         """添加消息"""

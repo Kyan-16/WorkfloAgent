@@ -1,0 +1,160 @@
+{
+  "title": "WorkfloAgent - 运维监控",
+  "version": 2,
+  "uid": "ticket-agent-main",
+  "tags": ["ticket-agent", "ai", "evolution"],
+  "timezone": "browser",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+
+    { "title": "系统概览", "type": "row", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+
+    {
+      "title": "QPS", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 1 },
+      "targets": [{ "expr": "rate(http_requests_total{job=\"ticket-agent\"}[5m])", "legendFormat": "QPS" }],
+      "fieldConfig": { "defaults": { "unit": "rps", "color": { "mode": "thresholds" } } }
+    },
+    {
+      "title": "P95 延迟", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 1 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95" }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "错误率", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 1 },
+      "targets": [{ "expr": "rate(http_requests_total{job=\"ticket-agent\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"ticket-agent\"}[5m]) * 100", "legendFormat": "错误率" }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "title": "自动处理率", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 1 },
+      "targets": [{ "expr": "rate(ticket_processing_total{auto_resolved=\"true\"}[30m]) / rate(ticket_processing_total[30m]) * 100", "legendFormat": "自动率" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{"color": "red", "value": 0}, {"color": "yellow", "value": 60}, {"color": "green", "value": 80}] } } }
+    },
+    {
+      "title": "知识缺口", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 1 },
+      "targets": [{ "expr": "sum(increase(evolution_knowledge_gap_total[24h]))", "legendFormat": "缺口数" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 5}, {"color": "red", "value": 10}] } } }
+    },
+    {
+      "title": "工单模式数", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 1 },
+      "targets": [{ "expr": "sum(increase(evolution_pattern_total[24h]))", "legendFormat": "模式" }]
+    },
+    {
+      "title": "复盘总数", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 1 },
+      "targets": [{ "expr": "sum(increase(evolution_review_total[24h]))", "legendFormat": "复盘" }]
+    },
+    {
+      "title": "MCP 活跃", "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
+      "targets": [{ "expr": "mcp_server_active", "legendFormat": "MCP" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}] } } }
+    },
+
+    { "title": "流量分析", "type": "row", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
+
+    {
+      "title": "HTTP 请求速率", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [{ "expr": "rate(http_requests_total{job=\"ticket-agent\"}[5m])", "legendFormat": "全部" }]
+    },
+    {
+      "title": "HTTP 延迟 (P50 / P90 / P99)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P90" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P99" }
+      ]
+    },
+
+    { "title": "AI 深度分析", "type": "row", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 } },
+
+    {
+      "title": "工单处理耗时分布", "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "targets": [{ "expr": "sum(rate(ticket_processing_duration_seconds_bucket[5m])) by (le)", "legendFormat": "{{ le }}" }]
+    },
+    {
+      "title": "Token 消耗趋势", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "targets": [{ "expr": "rate(llm_tokens_total[5m])", "legendFormat": "{{type}} - {{model}}" }]
+    },
+    {
+      "title": "工具调用成功率", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 23 },
+      "targets": [{ "expr": "rate(tool_calls_total{success=\"true\"}[5m]) / rate(tool_calls_total[5m]) * 100", "legendFormat": "成功率" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } }
+    },
+    {
+      "title": "各工具调用量", "type": "bargauge",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 23 },
+      "targets": [{ "expr": "sum(increase(tool_calls_total[30m])) by (tool)", "legendFormat": "{{tool}}" }]
+    },
+    {
+      "title": "RAG 零结果检索（按分类）", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
+      "targets": [{ "expr": "rate(rag_zero_result_total[5m])", "legendFormat": "{{category}}" }]
+    },
+    {
+      "title": "Agent 各步骤平均耗时", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "targets": [{ "expr": "rate(agent_step_duration_seconds_sum[5m]) / rate(agent_step_duration_seconds_count[5m])", "legendFormat": "{{step}}" }]
+    },
+    {
+      "title": "LLM 请求延迟", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "targets": [{ "expr": "rate(llm_request_duration_seconds_sum[5m]) / rate(llm_request_duration_seconds_count[5m])", "legendFormat": "{{model}}" }]
+    },
+
+    { "title": "业务概览", "type": "row", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 } },
+
+    {
+      "title": "工单处理量（按分类）", "type": "piechart",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 40 },
+      "targets": [{ "expr": "sum(increase(ticket_processing_total[1h])) by (category)", "legendFormat": "{{category}}" }]
+    },
+    {
+      "title": "自动处理 vs 转人工率", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 40 },
+      "targets": [{ "expr": "rate(ticket_processing_total{auto_resolved=\"true\"}[5m]) / rate(ticket_processing_total[5m]) * 100", "legendFormat": "自动处理率" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } }
+    },
+    {
+      "title": "工单处理失败数", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 40 },
+      "targets": [{ "expr": "rate(ticket_processing_total{result=\"error\"}[5m])", "legendFormat": "处理失败" }]
+    },
+    {
+      "title": "工单分类分布", "type": "bargauge",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 40 },
+      "targets": [{ "expr": "sum(increase(ticket_processing_total[6h])) by (result)", "legendFormat": "{{result}}" }]
+    },
+
+    { "title": "自进化分析 (P2)", "type": "row", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 } },
+
+    {
+      "title": "知识缺口趋势（按分类）", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 49 },
+      "targets": [{ "expr": "rate(evolution_knowledge_gap_total[5m])", "legendFormat": "{{category}}" }]
+    },
+    {
+      "title": "工单复盘评分趋势", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 49 },
+      "targets": [{ "expr": "rate(evolution_review_total[5m])", "legendFormat": "{{result}}" }]
+    },
+    {
+      "title": "分类准确率概览", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 49 },
+      "targets": [{ "expr": "rate(ticket_processing_total{result=\"success\"}[5m]) / rate(ticket_processing_total[5m]) * 100", "legendFormat": "处理成功率" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } }
+    }
+  ]
+}

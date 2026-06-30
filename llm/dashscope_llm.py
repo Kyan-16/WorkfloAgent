@@ -4,12 +4,17 @@ DashScope LLM 实现
 支持阿里云通义千问系列模型：
 - qwen-turbo / qwen-plus / qwen-max / qwen3-max
 - 以及所有 DashScope 兼容模型
+
+注意：Generation.call() 是同步调用，通过 asyncio.to_thread 抛到线程池执行，
+避免阻塞事件循环。
 """
+import asyncio
 import json
 import logging
 from typing import Optional, AsyncIterator
 
 from llm.base import LLMBase, LLMResponse, ChatMessage
+from utils.token_bucket import consume_llm_token
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +40,11 @@ class DashScopeLLM(LLMBase):
         max_tokens: Optional[int] = None,
         **kwargs,
     ) -> LLMResponse:
-        """非流式调用 DashScope API"""
+        """非流式调用 DashScope API（在线程池执行，不阻塞事件循环）"""
         temp, tokens = self._get_params(temperature, max_tokens)
 
         try:
-            import dashscope
             from dashscope import Generation
-
-            dashscope.api_key = self.api_key
 
             # 构建请求参数
             formatted_messages = [m.to_dict() for m in messages]
@@ -53,13 +55,19 @@ class DashScopeLLM(LLMBase):
                 "temperature": temp,
                 "max_tokens": tokens,
                 "top_p": self.top_p,
+                "api_key": self.api_key,
             }
 
             # 添加工具定义（Function Calling）
             if tools:
                 call_kwargs["tools"] = tools
 
-            response = Generation.call(**call_kwargs)
+            # 令牌桶限流
+            if not consume_llm_token(tokens=1, timeout=30.0):
+                raise TimeoutError("LLM API 调用被限流（等待超时）")
+
+            # 在线程池中执行同步 API 调用
+            response = await asyncio.to_thread(Generation.call, **call_kwargs)
 
             # 兼容不同版本的状态码获取方式
             status_code = getattr(response, "status_code", None) or getattr(
@@ -104,20 +112,14 @@ class DashScopeLLM(LLMBase):
             else:
                 error_msg = getattr(response, "message", str(response))
                 logger.error(f"DashScope API 调用失败: {error_msg}")
-                return LLMResponse(
-                    content=f"API 调用失败: {error_msg}",
-                    model=self.model,
-                    finish_reason="error",
-                )
+                raise RuntimeError(f"DashScope API 调用失败: {error_msg}")
 
         except ImportError:
             logger.error("dashscope 未安装，请运行: pip install dashscope")
-            return LLMResponse(content="dashscope SDK 未安装", finish_reason="error")
+            raise
         except Exception as e:
             logger.error(f"DashScope 调用异常: {e}", exc_info=True)
-            return LLMResponse(
-                content=f"调用异常: {str(e)}", model=self.model, finish_reason="error"
-            )
+            raise
 
     async def stream(
         self,
@@ -127,14 +129,11 @@ class DashScopeLLM(LLMBase):
         max_tokens: Optional[int] = None,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """流式调用 DashScope API"""
+        """流式调用 DashScope API（在线程池收集后异步 yield）"""
         temp, tokens = self._get_params(temperature, max_tokens)
 
         try:
-            import dashscope
             from dashscope import Generation
-
-            dashscope.api_key = self.api_key
 
             formatted_messages = [m.to_dict() for m in messages]
             call_kwargs = {
@@ -144,24 +143,32 @@ class DashScopeLLM(LLMBase):
                 "temperature": temp,
                 "max_tokens": tokens,
                 "top_p": self.top_p,
+                "api_key": self.api_key,
                 "stream": True,
             }
             if tools:
                 call_kwargs["tools"] = tools
 
-            response = Generation.call(**call_kwargs)
+            # 在线程池中收集所有流式块，避免阻塞事件循环
+            def _collect_chunks():
+                chunks = []
+                response = Generation.call(**call_kwargs)
+                for chunk in response:
+                    chunk_status = getattr(chunk, "status_code", None) or getattr(
+                        chunk, "status", None
+                    )
+                    if chunk_status == 200 and chunk.output and chunk.output.choices:
+                        delta = chunk.output.choices[0].message.content
+                        if delta:
+                            chunks.append(delta)
+                return chunks
 
-            for chunk in response:
-                chunk_status = getattr(chunk, "status_code", None) or getattr(
-                    chunk, "status", None
-                )
-                if chunk_status == 200 and chunk.output and chunk.output.choices:
-                    delta = chunk.output.choices[0].message.content
-                    if delta:
-                        yield delta
+            chunks = await asyncio.to_thread(_collect_chunks)
+            for chunk in chunks:
+                yield chunk
 
         except ImportError:
-            yield "[错误] dashscope SDK 未安装"
+            raise RuntimeError("dashscope SDK 未安装")
         except Exception as e:
             logger.error(f"DashScope 流式调用异常: {e}", exc_info=True)
-            yield f"[错误] {str(e)}"
+            raise

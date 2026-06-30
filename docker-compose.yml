@@ -1,0 +1,101 @@
+version: "3.8"
+
+# ============================================================
+# 一键启动（开发/演示模式）
+# 使用方式：
+#   1. 创建 .env 文件，填入 LLM_API_KEY
+#   2. docker compose up
+# ============================================================
+
+services:
+  # ============================================================
+  # 主服务 + Qdrant + Redis（完整体验）
+  # ============================================================
+  ticket-agent:
+    image: ticket-agent:latest
+    build:
+      context: .
+      dockerfile: ticket_agent/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # LLM（从 .env 读取）
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      - LLM_API_KEY=${LLM_API_KEY:?请在 .env 中设置 LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      # 存储（默认 SQLite，无需外部数据库）
+      - DATABASE_URL=sqlite:///data/ticket_agent.db
+      # Qdrant 向量检索（可选，默认不开启）
+      - QDRANT_ENABLED=${QDRANT_ENABLED:-false}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-${LLM_API_KEY}}
+      # 功能开关
+      - MCP_ENABLED=true
+      - PROMETHEUS_ENABLED=true
+      - AGENT_TRACE_ENABLED=true
+    # 不依赖外部服务 — Qdrant/Redis 不可用时自动降级
+    volumes:
+      - ticket_data:/app/data
+      - ticket_traces:/app/traces
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ticket-net
+
+  # ============================================================
+  # Qdrant 向量数据库（开启 QDRANT_ENABLED=true 后自动启用）
+  # ============================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles:
+      - full
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ticket-net
+
+  # ============================================================
+  # Redis 缓存
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    profiles:
+      - full
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ticket-net
+
+volumes:
+  ticket_data:
+  ticket_traces:
+  qdrant_data:
+  redis_data:
+
+networks:
+  ticket-net:
+    driver: bridge

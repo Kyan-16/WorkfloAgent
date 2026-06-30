@@ -6,7 +6,7 @@ Tool 基类定义
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 
@@ -51,7 +51,7 @@ class Tool(ABC):
     # 子类必须定义这三个属性
     name: str = ""
     description: str = ""
-    parameters: dict = field(default_factory=dict) if False else {}
+    parameters: dict = {}  # 子类覆盖此属性，格式为 OpenAI Function Calling Schema
 
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:

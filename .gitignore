@@ -1,0 +1,39 @@
+# ── 环境变量 ──
+.env
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+
+# ── 运行时数据 ──
+*.db
+*.db-shm
+*.db-wal
+data/
+traces/
+uploads/
+*.jsonl
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ── 临时规划文档 ──
+*PLAN*.md
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── 系统 ──
+.DS_Store
+Thumbs.db

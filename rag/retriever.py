@@ -52,12 +52,10 @@ class Retriever:
         vector_store: VectorStoreBase,
         top_k: int = 5,
         score_threshold: Optional[float] = None,
-        embedding=None,
     ):
         self.vector_store = vector_store
         self.top_k = top_k
         self.score_threshold = score_threshold
-        self.embedding = embedding
 
     async def retrieve(
         self,
