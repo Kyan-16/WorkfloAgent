@@ -437,6 +437,7 @@ class ReportGeneratorTool(Tool):
             self._ensure_dependency("fpdf2")
 
         from fpdf import FPDF
+        from fpdf.errors import FPDFUnicodeEncodingException
 
         pdf = FPDF()
         pdf.add_page()
