@@ -104,16 +104,3 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t ticket-agent:latest -f ticket_agent/Dockerfile .
-
-      - name: Log in to Docker Hub
-        if: github.event_name == 'push'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Push to registry
-        if: github.event_name == 'push'
-        run: |
-          docker tag ticket-agent:latest ${{ secrets.DOCKER_USERNAME }}/ticket-agent:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/ticket-agent:latest
