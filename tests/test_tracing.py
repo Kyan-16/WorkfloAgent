@@ -12,7 +12,8 @@ from utils.tracing import AgentTraceRecorder, _truncate, _trace_enabled, _max_ch
 class TestTracingHelpers:
     """工具函数测试"""
 
-    def test_trace_enabled_default(self):
+    def test_trace_enabled_default(self, monkeypatch):
+        monkeypatch.delenv("AGENT_TRACE_ENABLED", raising=False)
         assert _trace_enabled() is True
 
     def test_trace_enabled_false(self, monkeypatch):

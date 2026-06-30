@@ -458,87 +458,35 @@ class ReportGeneratorTool(Tool):
             body_font = "Helvetica"
             logger.warning("未找到 Unicode 字体，PDF 中的中文可能显示为乱码")
 
-        # 标题
-        pdf.set_font(title_font, "B", 18)
-        pdf.cell(0, 15, title, align="C", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(5)
-
-        # 基本信息
-        pdf.set_font(body_font, "", 11)
-        pdf.cell(0, 8, f"生成时间: {stats['generated_at']}", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 8, f"数据范围: {len(tickets)} 条工单", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(5)
-
-        # 分类统计
-        pdf.set_font(body_font, "B", 13)
-        pdf.cell(0, 10, "一、按分类统计", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font(body_font, "", 11)
-        for cat, count in sorted(
-            stats["category_stats"].items(), key=lambda x: -x[1]
-        ):
-            pdf.cell(0, 8, f"  {cat}: {count} 个工单", new_x="LMARGIN", new_y="NEXT")
-
-        pdf.ln(5)
-
-        # 状态统计
-        pdf.set_font(body_font, "B", 13)
-        pdf.cell(0, 10, "二、按状态统计", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font(body_font, "", 11)
-        for st, count in sorted(
-            stats["status_stats"].items(), key=lambda x: -x[1]
-        ):
-            pdf.cell(0, 8, f"  {st}: {count} 个工单", new_x="LMARGIN", new_y="NEXT")
-
-        pdf.ln(5)
-
-        # 热门用户
-        pdf.set_font(body_font, "B", 13)
-        pdf.cell(0, 10, "三、活跃用户", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font(body_font, "", 11)
-        pdf.cell(
-            0, 8,
-            f"  提交工单最多的用户: {stats['top_user']} ({stats['top_user_count']} 个工单)",
-            new_x="LMARGIN", new_y="NEXT",
-        )
-
-        # —— 工单明细表（简表） ——
-        pdf.ln(5)
-        pdf.set_font(body_font, "B", 13)
-        pdf.cell(0, 10, "四、工单明细", new_x="LMARGIN", new_y="NEXT")
-
-        # 表头
-        pdf.set_font(body_font, "B", 8)
-        col_w = [30, 22, 30, 20, 40]
-        headers = ["工单ID", "用户", "分类", "状态", "内容摘要"]
-        for i, h in enumerate(headers):
-            pdf.cell(col_w[i], 7, h, border=1)
-        pdf.ln()
-
-        pdf.set_font(body_font, "", 8)
-        for t in tickets[:50]:  # 最多展示 50 条
-            row = [
-                t.ticket_id[-12:],
-                t.user_id or "-",
-                t.category.value if t.category else "-",
-                t.status.value if t.status else "-",
-                t.content[:28] + "..." if len(t.content) > 28 else t.content,
-            ]
-            for i, val in enumerate(row):
-                pdf.cell(col_w[i], 6, val, border=1)
-            pdf.ln()
-
-        if len(tickets) > 50:
-            pdf.set_font(body_font, "I", 9)
-            pdf.cell(
-                0, 8,
-                f"... 仅展示前 50 条，共 {len(tickets)} 条",
-                new_x="LMARGIN", new_y="NEXT",
+        # 渲染内容（含编码容错：无 Unicode 字体时自动降级为纯英文 PDF）
+        try:
+            result = self._render_pdf_content(
+                pdf, title, title_font, body_font, tickets, stats,
             )
+            if result:
+                return result
+        except FPDFUnicodeEncodingException:
+            logger.warning("PDF 编码失败（当前字体不支持中文），回退到 ASCII 版本")
 
-        # 保存
+        # 回退：纯英文 PDF（任何字体都可渲染）
+        pdf2 = FPDF()
+        pdf2.add_page()
+        pdf2.set_font("Helvetica", "B", 16)
+        pdf2.cell(0, 15, title, align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf2.ln(5)
+        pdf2.set_font("Helvetica", "", 10)
+        pdf2.cell(0, 8, f"Generated: {stats['generated_at']}", new_x="LMARGIN", new_y="NEXT")
+        pdf2.cell(0, 8, f"Total tickets: {len(tickets)}", new_x="LMARGIN", new_y="NEXT")
+        pdf2.ln(5)
+        pdf2.set_font("Helvetica", "B", 12)
+        pdf2.cell(0, 10, "Category Statistics", new_x="LMARGIN", new_y="NEXT")
+        pdf2.set_font("Helvetica", "", 10)
+        for cat, count in sorted(stats["category_stats"].items(), key=lambda x: -x[1]):
+            pdf2.cell(0, 8, f"  {cat}: {count}", new_x="LMARGIN", new_y="NEXT")
+
         filename = f"{safe_title}_{timestamp}.pdf"
         filepath = os.path.join(reports_dir, filename)
-        pdf.output(filepath)
+        pdf2.output(filepath)
 
         return ToolResult(
             success=True,
@@ -550,6 +498,61 @@ class ReportGeneratorTool(Tool):
                 "generated_at": stats["generated_at"],
             },
         )
+
+    # ---- PDF ----
+
+    def _render_pdf_content(
+        self, pdf, title: str, title_font: str, body_font: str,
+        tickets, stats: dict,
+    ) -> ToolResult | None:
+        """渲染 PDF 中文内容（可能因缺字体抛出 FPDFUnicodeEncodingException）"""
+        from fpdf import FPDF
+
+        pdf.set_font(title_font, "B", 18)
+        pdf.cell(0, 15, title, align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        pdf.set_font(body_font, "", 11)
+        pdf.cell(0, 8, f"生成时间: {stats['generated_at']}", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, f"数据范围: {len(tickets)} 条工单", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        pdf.set_font(body_font, "B", 13)
+        pdf.cell(0, 10, "一、按分类统计", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(body_font, "", 11)
+        for cat, count in sorted(stats["category_stats"].items(), key=lambda x: -x[1]):
+            pdf.cell(0, 8, f"  {cat}: {count} 个工单", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        pdf.set_font(body_font, "B", 13)
+        pdf.cell(0, 10, "二、按状态统计", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(body_font, "", 11)
+        for st, count in sorted(stats["status_stats"].items(), key=lambda x: -x[1]):
+            pdf.cell(0, 8, f"  {st}: {count} 个工单", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        pdf.set_font(body_font, "B", 13)
+        pdf.cell(0, 10, "三、活跃用户", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(body_font, "", 11)
+        pdf.cell(0, 8, f"  提交工单最多的用户: {stats['top_user']} ({stats['top_user_count']} 个工单)", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        pdf.set_font(body_font, "B", 13)
+        pdf.cell(0, 10, "四、工单明细", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(body_font, "B", 8)
+        col_w = [30, 22, 30, 20, 40]
+        headers = ["工单ID", "用户", "分类", "状态", "内容摘要"]
+        for i, h in enumerate(headers):
+            pdf.cell(col_w[i], 7, h, border=1)
+        pdf.ln()
+        pdf.set_font(body_font, "", 8)
+        for t in tickets[:50]:
+            row = [t.ticket_id[-12:], t.user_id or "-",
+                   t.category.value if t.category else "-",
+                   t.status.value if t.status else "-",
+                   t.content[:28] + "..." if len(t.content) > 28 else t.content]
+            for i, val in enumerate(row):
+                pdf.cell(col_w[i], 6, val, border=1)
+            pdf.ln()
+        if len(tickets) > 50:
+            pdf.set_font(body_font, "I", 9)
+            pdf.cell(0, 8, f"... 仅展示前 50 条，共 {len(tickets)} 条", new_x="LMARGIN", new_y="NEXT")
+        return None
 
     # ---- Excel ----
 
