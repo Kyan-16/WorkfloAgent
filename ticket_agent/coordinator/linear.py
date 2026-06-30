@@ -7,12 +7,15 @@
 import logging
 import time
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from llm.base import LLMBase
 from memory.base import MemoryBase
 from agents.base import AgentResponse
 from rag.retriever import Retriever
+
+if TYPE_CHECKING:
+    from rag.reranker import CrossEncoderReranker
 
 from ticket_agent.models.ticket import Ticket, TicketCategory, TicketStatus
 from ticket_agent.repository import get_ticket_repository
