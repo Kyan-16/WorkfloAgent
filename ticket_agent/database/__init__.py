@@ -61,7 +61,12 @@ def init_db(db_url: Optional[str] = None):
 
 
 def _run_migrations(engine):
-    """增量迁移：为已有表添加新列（不破坏现有数据）"""
+    """
+    增量迁移：为已有表添加新列（不破坏现有数据）。
+
+    用 inspector 检测缺失列，逐条 ALTER TABLE ADD COLUMN。
+    这样旧数据库可以平滑升级，不需要 Alembic 也能工作。
+    """
     import sqlalchemy as sa
     from sqlalchemy import inspect
 

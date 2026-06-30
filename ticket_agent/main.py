@@ -5,16 +5,19 @@
     # 开发模式
     uvicorn ticket_agent.main:app --reload --port 8000
 
-    # 使用 DashScope 模型（默认）
-    export AGENT_LLM_API_KEY=your-api-key
+    # 使用 DashScope / OpenAI 兼容接口
+    export LLM_API_KEY=your-api-key
     uvicorn ticket_agent.main:app --port 8000
 
-    # 使用 OpenAI 兼容接口（DeepSeek/GLM/Ollama）
-    export LLM_PROVIDER=openai
-    export LLM_API_KEY=sk-xxx
-    export LLM_BASE_URL=https://api.deepseek.com/v1
-    uvicorn ticket_agent.main:app --port 8000
+初始化流程：
+  1. 加载配置（环境变量 + YAML）
+  2. 初始化数据库
+  3. 初始化 LLM + Memory
+  4. 创建 Coordinator（编排中枢）
+  5. 启动调度器 + 进化执行器
+  6. 注册路由和中间件
 """
+
 import logging
 import os
 from contextlib import asynccontextmanager

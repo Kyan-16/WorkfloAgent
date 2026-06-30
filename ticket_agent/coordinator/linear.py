@@ -97,6 +97,15 @@ class LinearCoordinator:
     # ── 自动分配 ──
 
     def _auto_assign(self, category: str) -> dict:
+        """
+        按负载均衡自动分配工单给工程师。
+
+        策略：
+          1. 找到对应部门的工程师列表
+          2. 按"当前待处理工单数"升序排序
+          3. 分配给出单最少的工程师
+          4. 没有工程师则分配给经理，兜底给管理员
+        """
         default = {"department_id": 0, "assigned_to": None, "assigned_name": ""}
         dept_id = CATEGORY_DEPT_MAP.get(category)
         if not dept_id:
@@ -163,6 +172,21 @@ class LinearCoordinator:
         images: list[str] = None,
         user_category: str = "",
     ) -> dict:
+        """
+        工单处理主流程。
+
+        管线步骤（4 步）：
+          1. classify   — 分类 Agent 判断工单类别（IT/HR/财务/运维/其他）
+          2. retrieve   — RAG 检索知识库（按分类隔离）
+          3. execute    — 执行 Agent（ReAct 循环，最多 5 轮工具调用）
+          4. respond    — 汇总结果生成回复
+
+        特殊分支：
+          - confidence < 0.6 → 主动追问澄清
+          - needs_human=True → 直接转人工
+          - 分类 HR/财务 → 自动进入审批流程
+          - 任意步骤抛异常 → 兜底转人工
+        """
         start_time = time.time()
         trace_id = str(uuid.uuid4())
         agent_steps = []

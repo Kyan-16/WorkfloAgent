@@ -181,7 +181,7 @@ class NotifyUserTool(Tool):
             return ToolResult(success=False, error=f"通知发送失败: {str(e)}")
 
     async def _send_email(self, email: str, message: str):
-        """发送邮件（需配置 SMTP）"""
+        """发送邮件（需配置 SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD / SMTP_FROM）"""
         import os
         smtp_host = os.getenv("SMTP_HOST", "")
         if not smtp_host:

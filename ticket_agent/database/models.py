@@ -105,9 +105,9 @@ class TicketRecord(Base):
     resolved_at = Column(DateTime, nullable=True)
     closed_at = Column(DateTime, nullable=True)
 
-    # SLA
-    sla_deadline = Column(DateTime, nullable=True)
-    sla_breached = Column(Boolean, default=False)
+    # SLA 字段
+    sla_deadline = Column(DateTime, nullable=True)      # 目标解决截止时间（创建时按优先级自动计算）
+    sla_breached = Column(Boolean, default=False)       # 是否已超时（读取时实时计算，重写时持久化）
 
     department = relationship("Department", back_populates="tickets")
     assignee = relationship("User", foreign_keys=[assigned_to])

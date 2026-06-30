@@ -19,7 +19,14 @@ class TicketRepository:
     """工单数据仓库 —— 唯一的数据访问入口"""
 
     def create(self, ticket: Ticket) -> Ticket:
-        """创建工单"""
+        """
+        创建工单。
+
+        自动设置：
+          - created_at / updated_at 时间戳
+          - priority 默认为 "normal"
+          - sla_deadline 根据优先级计算（urgent=4h / high=8h / normal=24h / low=48h）
+        """
         try:
             now = datetime.now(timezone.utc)
             from ticket_agent.sla.config import get_sla_deadline
@@ -110,7 +117,12 @@ class TicketRepository:
             return []
 
     def batch_update(self, ticket_ids: list[str], **kwargs) -> int:
-        """批量更新工单字段，返回更新的记录数"""
+        """
+        批量更新工单字段，返回更新的记录数。
+
+        用于批量操作端点（批量关闭/分配/转人工），
+        单事务包装，任一失败整个回滚。
+        """
         try:
             with session_scope() as session:
                 count = session.query(TicketRecord).filter(
